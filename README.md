@@ -2,6 +2,10 @@
 
 RISKORA combines a browser workstation, a Tornado JSON API, SQLite storage, and a calibrated scikit-learn model. The bundled 12,000-row dataset is synthetic. It supports an academic demonstration; real authentication, controlled funding approval, and reliable payment-ledger handling remain future milestones.
 
+## Architecture
+
+See the [architecture diagram and current workflow](ARCHITECTURE.md) for the frontend, API, services, database, ML pipeline and implementation boundaries.
+
 ## First milestone: implemented
 
 - Reproducible CPython 3.14 environment with pinned runtime dependencies.
