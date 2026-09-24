@@ -13,6 +13,7 @@ const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
 let activeCase = null;
 let activeAnalysis = null;
 let activeFunding = null;
+let fundingPreview = null;
 let activeRepayment = null;
 let currentPage = 'overview';
 let demoTimer = null;
@@ -75,6 +76,7 @@ async function apiCall(endpoint, options = {}) {
   try {
     const res = await fetch(endpoint, {
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(30000),
       ...options
     });
     if (!res.ok) {
@@ -144,6 +146,7 @@ function initEntry() {
     intro.classList.remove('playing', 'failed');
     intro.setAttribute('aria-hidden', 'true');
     shell.style.visibility = 'visible';
+    shell.setAttribute('aria-hidden', 'false');
   };
 
   video.addEventListener('ended', enterApp);
@@ -174,6 +177,7 @@ function showPage(page) {
   $('pageTitle').textContent = titles[page] || page;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
+  if (page === 'decision') renderDecision();
   if (page === 'cases') loadCaseQueue();
   if (page === 'intelligence' && activeAnalysis) renderIntelligence(activeAnalysis);
   if (page === 'funding') renderFunding();
@@ -187,7 +191,7 @@ function showPage(page) {
 function stageIndex() {
   let n = 1; // 1: Request received
   if (activeAnalysis) n = 2; // 2: Risk investigated
-  if (activeFunding) n = 3; // 3: Funding optimised
+  if (activeFunding && !activeFunding.preview) n = 3; // 3: Funding optimised
   if (activeRepayment) n = 4; // 4: Repayment simulated
   if (activeFunding && activeRepayment) n = 5; // 5: Exposure quantified
   if (activeAnalysis && activeFunding && activeRepayment) n = 6; // 6: Decision assembled
@@ -239,7 +243,7 @@ function renderOverview() {
     $('mPdLabel').textContent = 'Statistical default hazard';
   }
 
-  $('mFunding').textContent = activeFunding ? (activeFunding.mode === 'fractional' ? `Fractional (${activeFunding.lender_count} Lenders)` : 'Single Lender') : 'Pending';
+  $('mFunding').textContent = activeFunding && !activeFunding.preview ? (activeFunding.mode === 'fractional' ? `Fractional (${activeFunding.lender_count} Lenders)` : 'Single Lender') : 'Pending';
   $('mDecision').textContent = decisionText();
 
   if (activeAnalysis) {
@@ -258,12 +262,12 @@ function renderOverview() {
 function decisionText() {
   if (!activeAnalysis) return 'Pending Analysis';
   if (activeAnalysis.risk_level === 'HIGH') {
-    return activeFunding && activeFunding.mode === 'fractional' ? 'Conditional Approval' : 'Escalate / Mitigate';
+    return 'Human review required · High risk';
   }
   if (activeAnalysis.risk_level === 'MEDIUM') {
-    return 'Conditional Approval';
+    return 'Human review required · Medium risk';
   }
-  return 'Standard Approval';
+  return 'Human review required · Low risk';
 }
 
 // 5. Load Case Queue from Backend API
@@ -277,7 +281,8 @@ async function loadCaseQueue() {
     renderCaseTable(data.loans || []);
     renderOverviewCards(data.loans || []);
   } catch (err) {
-    console.error('Failed to load loan queue:', err);
+    $('caseTable').textContent = 'Could not load the queue. Retry using the filters.';
+    showToast(err.message, 'error', 'Queue unavailable');
   }
 }
 
@@ -346,18 +351,26 @@ async function openCaseById(id, switchPage = true) {
     activeCase = loan;
     activeAnalysis = loan.assessment || null;
     activeFunding = loan.funding || null;
+    fundingPreview = null;
     activeRepayment = loan.repayment || null;
 
     // Set form defaults
-    $('repPrincipal').value = loan.loan_amount;
+    $('repPrincipal').value = loan.repayment?.original_principal ?? loan.loan_amount;
+    $('repRate').value = loan.repayment?.annual_interest_rate ?? loan.interest_rate;
+    $('repTerm').value = loan.repayment?.term_months ?? loan.loan_term;
+    $('repDate').value = loan.repayment?.installments?.[0]?.due_date ?? '';
+    $('repScheduleType').value = loan.repayment?.schedule_type ?? 'monthly';
+    $('repAllocationPolicy').value = loan.repayment?.allocation_policy ?? 'pro-rata';
+    $('fundingMode').value = loan.funding?.mode ?? 'auto';
+    $('lenderCount').value = loan.funding?.lender_count ?? 3;
     $('scenarioSlider').value = loan.loan_amount;
     $('scenarioCreditSlider').value = loan.credit_score || 650;
-    $('scenarioDtiSlider').value = loan.dti_ratio || 0.32;
+    $('scenarioDtiSlider').value = loan.dti_ratio ?? 0.32;
 
     renderOverview();
-    if (activeAnalysis) renderIntelligence(activeAnalysis);
-    if (activeFunding) renderFunding();
-    if (activeRepayment) renderRepayment();
+    renderIntelligence(activeAnalysis);
+    renderFunding();
+    renderRepayment();
     updateScenarioLab();
     if (switchPage) {
       showPage('overview');
@@ -399,12 +412,25 @@ async function runAnalysis() {
     updateScenarioLab();
     showToast(`Calibrated assessment complete: ${result.risk_level} RISK (Score ${result.risk_score}/100, PD ${result.probability_pct}%)`, 'success', 'Model Inference Complete');
     showPage('intelligence');
+    return true;
   } catch (err) {
     showToast(`ML Inference failed: ${err.message}`, 'error', 'Inference Error');
   }
 }
 
 function renderIntelligence(res) {
+  if (!res) {
+    ['riskScore','riskPdHero','sigPd','sigDti','sigCredit','sigCoverage','dqScore','dqFieldsCount'].forEach(id => $(id).textContent = '—');
+    ['riskDrivers','riskProtective','dqWarnings','anomalyList','explainabilityText'].forEach(id => $(id).textContent = '');
+    $('riskLevel').textContent = 'NOT ASSESSED';
+    $('analysisHeadline').textContent = 'Awaiting assessment';
+    $('analysisSummary').textContent = 'Run analysis for the selected borrower.';
+    $('dqBadge').textContent = 'NOT CHECKED';
+    $('anomalyBadge').textContent = 'SCAN PENDING';
+    $('dqBar').style.width = '0%';
+    document.querySelector('.gauge-ring').style.background = '#2a2e32';
+    return;
+  }
   $('riskScore').textContent = res.risk_score;
   $('riskLevel').className = `risk-pill ${res.risk_level.toLowerCase()}`;
   $('riskLevel').textContent = `${res.risk_level} RISK`;
@@ -455,12 +481,12 @@ function renderIntelligence(res) {
 
   // Render Data Quality
   const dq = res.data_quality || {};
-  $('dqScore').textContent = `${dq.data_quality_score || 92}/100`;
-  $('dqBar').style.width = `${dq.data_quality_score || 92}%`;
+  $('dqScore').textContent = `${dq.data_quality_score ?? 0}/100`;
+  $('dqBar').style.width = `${dq.data_quality_score ?? 0}%`;
   $('dqBar').style.background = dq.data_quality_score >= 80 ? 'var(--green)' : 'var(--amber)';
   $('dqBadge').textContent = dq.quality_tier || 'ACCEPTABLE';
   $('dqBadge').className = `status-chip ${dq.quality_tier === 'EXCELLENT' ? 'done' : ''}`;
-  $('dqFieldsCount').textContent = `${dq.available_fields_count || 14} / ${dq.total_fields_count || 15} required & optional fields verified (${dq.completeness_pct || 93}%)`;
+  $('dqFieldsCount').textContent = `${dq.available_fields_count ?? 0} / ${dq.total_fields_count || 15} required & optional fields verified (${dq.completeness_pct ?? 0}%)`;
 
   const dqWarns = [
     ...(dq.missing_required_fields || []).map(m => `Missing: ${m}`),
@@ -488,15 +514,17 @@ function renderIntelligence(res) {
     $('anomalyList').innerHTML = '<div style="font-size:10px; color:var(--green);">✓ No statistical irregularities or contradictory profiles detected.</div>';
   }
 
-  $('explainabilityText').textContent = res.explainability_disclosure || '';
+  $('explainabilityText').textContent = 'Policy rule indicators, not trained-model feature attributions. Predictions use a model trained on synthetic data.';
 }
 
 // 8. Scenario Lab (What-If ML Simulation)
+let scenarioRequest = 0;
 async function updateScenarioLab() {
+  const request = ++scenarioRequest;
   if (!activeCase) return;
   const simAmount = Number($('scenarioSlider').value) || activeCase.loan_amount;
   const simCredit = Number($('scenarioCreditSlider').value) || (activeCase.credit_score || 650);
-  const simDti = Number($('scenarioDtiSlider').value) || (activeCase.dti_ratio || 0.32);
+  const simDti = Number($('scenarioDtiSlider').value);
 
   $('scenarioAmount').textContent = money(simAmount);
   $('scenarioCreditVal').textContent = simCredit;
@@ -515,6 +543,7 @@ async function updateScenarioLab() {
       })
     });
 
+    if (request !== scenarioRequest) return;
     $('scenarioRisk').textContent = `${res.scenario.score}/100 (${res.scenario.level})`;
     $('scenarioDelta').textContent = res.comparison.score_delta === 0
       ? 'Identical to baseline case'
@@ -524,15 +553,16 @@ async function updateScenarioLab() {
     $('scenarioPdDelta').textContent = `${res.comparison.pd_delta_pts > 0 ? '+' : ''}${res.comparison.pd_delta_pts} pp vs baseline`;
 
     $('scenarioEmi').textContent = money(res.scenario.indicative_emi);
+    $('scenarioEmi').nextElementSibling.textContent = `${activeCase.loan_term} mos @ ${activeCase.interest_rate}% APR`;
     $('scenarioFunding').textContent = res.scenario.recommended_mode === 'fractional' ? 'Fractional Syndication' : 'Single Lender';
     $('scenarioDecision').textContent = res.scenario.level === 'HIGH' ? 'Escalate to Senior Committee' : (res.scenario.level === 'MEDIUM' ? 'Conditional Underwriting' : 'Eligible for Fast-Track');
   } catch (err) {
-    console.error('Simulation error:', err);
+    if (request === scenarioRequest) { $('scenarioRisk').textContent = 'Unavailable'; $('scenarioDelta').textContent = err.message; }
   }
 }
 
 // 9. Funding Optimizer
-async function optimizeFunding() {
+async function optimizeFunding(commit = false) {
   if (!activeCase) return;
   const mode = $('fundingMode').value;
   const count = Number($('lenderCount').value) || 3;
@@ -543,7 +573,7 @@ async function optimizeFunding() {
     const result = await apiCall('/api/funding/optimize', {
       method: 'POST',
       body: JSON.stringify({
-        loanId: activeCase.id,
+        loanId: commit === true ? activeCase.id : undefined,
         amount,
         riskLevel,
         mode,
@@ -551,16 +581,19 @@ async function optimizeFunding() {
       })
     });
 
-    activeFunding = result;
+    if (commit === true) { activeFunding = result; fundingPreview = null; }
+    else fundingPreview = {...result, preview: true};
     renderFunding();
     renderOverview();
-    showToast(`Funding structure computed: ${result.mode.toUpperCase()} model (${result.positions.length} lenders, HHI ${result.herfindahl_index})`, 'success', 'Syndication Structured');
+    showToast(`Funding structure computed: ${result.mode.toUpperCase()} model (${result.positions.length} lenders, HHI ${result.herfindahl_index})`, 'success', commit === true ? 'Funding Saved' : 'Preview Only');
+    return true;
   } catch (err) {
     showToast(`Funding optimisation failed: ${err.message}`, 'error', 'Syndication Error');
   }
 }
 
 function renderFunding() {
+  const funding = fundingPreview || activeFunding;
   if (!activeCase) return;
   const amount = activeCase.loan_amount || activeCase.amount;
   $('fundingAmount').textContent = money(amount);
@@ -568,7 +601,7 @@ function renderFunding() {
     ? `Current Evaluated Risk: ${activeAnalysis.risk_level} (Score ${activeAnalysis.risk_score}/100, PD ${activeAnalysis.probability_pct}%).`
     : 'Run case analysis before committing structure.';
 
-  if (!activeFunding) {
+  if (!funding) {
     $('fundingFlow').innerHTML = '<div class="borrower-node"><b>Borrower</b><span>Awaiting structure</span></div><div class="lender-list"><div class="lender-bar"><div class="lb-top"><span>Syndication pending</span><span>—</span></div><small>Click "Commit Funding Structure" to calculate lender allocations.</small></div></div>';
     $('fundingBadge').textContent = 'PENDING';
     $('fundingInsights').innerHTML = '';
@@ -576,23 +609,23 @@ function renderFunding() {
     return;
   }
 
-  $('fundingBadge').textContent = activeFunding.mode === 'fractional' ? 'FRACTIONAL SYNDICATION' : 'SINGLE LENDER';
+  $('fundingBadge').textContent = funding.preview ? 'PREVIEW · NOT COMMITTED' : funding.mode === 'fractional' ? 'FRACTIONAL SYNDICATION' : 'SINGLE LENDER';
   $('fundingBadge').className = 'status-chip done';
 
   $('fundingFlow').innerHTML = `
     <div class="borrower-node">
       <b>Borrower</b>
-      <span>${money(activeFunding.total_requested)}</span>
+      <span>${money(funding.total_requested)}</span>
     </div>
     <div class="lender-list">
-      ${activeFunding.positions.map(p => `
+      ${funding.positions.map(p => `
         <div class="lender-bar">
           <div class="lb-top">
             <span>${esc(p.lender_name)} ${p.is_lead ? '(Lead)' : ''}</span>
             <span>${p.share_pct}% · ${money(p.committed_amount)}</span>
           </div>
           <div class="lb-track"><i style="width:${p.share_pct}%"></i></div>
-          <small>${activeFunding.mode === 'fractional' ? 'Syndicated risk-sharing commitment' : 'Full principal carried by sole lender'}</small>
+          <small>${funding.mode === 'fractional' ? 'Syndicated risk-sharing commitment' : 'Full principal carried by sole lender'}</small>
         </div>
       `).join('')}
     </div>
@@ -601,39 +634,40 @@ function renderFunding() {
   $('fundingInsights').innerHTML = `
     <div>
       <span>Largest Lender Share</span>
-      <b>${activeFunding.largest_lender_share}%</b>
+      <b>${funding.largest_lender_share}%</b>
     </div>
     <div>
       <span>Herfindahl Index (HHI)</span>
-      <b>${activeFunding.herfindahl_index}</b>
+      <b>${funding.herfindahl_index}</b>
     </div>
     <div>
       <span>Concentration Grade</span>
-      <b>${activeFunding.concentration_rating.replace('_', ' ')}</b>
+      <b>${funding.concentration_rating.replace('_', ' ')}</b>
     </div>
   `;
 
   $('fundingDecisionStrip').innerHTML = `
-    <div><span>Requested Principal</span><b>${money(activeFunding.total_requested)}</b></div>
-    <div><span>Syndication Model</span><b>${activeFunding.mode === 'fractional' ? `Fractional (${activeFunding.lender_count} Lenders)` : 'Single Lender'}</b></div>
-    <div><span>Exposure Distribution</span><b>${activeFunding.concentration_description}</b></div>
+    <div><span>Requested Principal</span><b>${money(funding.total_requested)}</b></div>
+    <div><span>Syndication Model</span><b>${funding.mode === 'fractional' ? `Fractional (${funding.lender_count} Lenders)` : 'Single Lender'}</b></div>
+    <div><span>Exposure Distribution</span><b>${funding.concentration_description}</b></div>
     <div><span>Next Step</span><b>Generate Repayment Plan →</b></div>
   `;
 }
 
 function applyFunding() {
   if (!activeAnalysis) {
-    runAnalysis().then(() => optimizeFunding().then(() => showPage('repayment')));
+    runAnalysis().then(ok => { if (ok) optimizeFunding(true).then(saved => { if (saved) showPage('repayment'); }); });
     return;
   }
-  optimizeFunding().then(() => showPage('repayment'));
+  optimizeFunding(true).then(ok => { if (ok) showPage('repayment'); });
 }
 
 // 10. Repayment Engine & Amortisation
 async function generateRepayment() {
   if (!activeCase) return;
+  if (!activeFunding || activeFunding.preview) { showToast('Commit the funding structure before generating a schedule.', 'warning'); return; }
   const principal = Number($('repPrincipal').value) || (activeCase.loan_amount || activeCase.amount);
-  const rate = Number($('repRate').value) || 12.5;
+  const rate = Number($('repRate').value);
   const term = Number($('repTerm').value) || 36;
   const startDate = $('repDate').value || new Date().toISOString().slice(0, 10);
   const scheduleType = $('repScheduleType').value;
@@ -672,7 +706,14 @@ async function generateRepayment() {
 }
 
 function renderRepayment() {
-  if (!activeRepayment) return;
+  if (!activeRepayment) {
+    $('emiValue').textContent = '—';
+    $('emiMeta').textContent = 'Generate a schedule for this case.';
+    $('repaymentHeadline').textContent = 'No schedule generated';
+    ['repaymentNarrative','repaymentAllocation','scheduleBody'].forEach(id => $(id).textContent = '');
+    $('scheduleStatus').textContent = 'NOT GENERATED';
+    return;
+  }
   $('emiValue').textContent = money(activeRepayment.indicative_emi);
   $('emiMeta').textContent = `${activeRepayment.num_installments} installments · ${activeRepayment.annual_interest_rate}% APR · Total Repayable: ${money(activeRepayment.total_repayable)}`;
   
@@ -755,9 +796,9 @@ async function loadExposurePortfolio() {
     const data = await apiCall('/api/exposure/portfolio');
     const port = data.portfolio_summary || {};
     
-    const committed = activeFunding ? activeFunding.total_requested : port.total_portfolio_principal;
+    const committed = activeFunding && !activeFunding.preview ? activeFunding.total_requested : 0;
     const outstanding = activeRepayment && activeRepayment.installments
-      ? (activeRepayment.installments.find(i => i.status !== 'PAID')?.remaining_balance || 0)
+      ? Math.max(0, activeRepayment.original_principal - activeRepayment.installments.filter(i => i.status === 'PAID').reduce((sum, i) => sum + i.principal_component, 0))
       : committed;
 
     $('expCommitted').textContent = money(committed);
@@ -765,10 +806,11 @@ async function loadExposurePortfolio() {
     $('expLargest').textContent = activeFunding ? `${activeFunding.largest_lender_share}%` : '100.0%';
     $('expConcentration').textContent = activeFunding ? `HHI ${activeFunding.herfindahl_index}` : 'HHI 10000';
 
-    if (activeFunding) {
+    if (activeFunding && !activeFunding.preview) {
       $('exposureRows').innerHTML = activeFunding.positions.map(p => {
         const pCommitted = p.committed_amount;
-        const pOut = (outstanding * (p.share_pct / 100.0));
+        const paidPrincipal = (activeRepayment?.installments || []).filter(i => i.status === 'PAID').flatMap(i => i.allocations || []).filter(a => a.lender_id === p.lender_id).reduce((sum, a) => sum + a.principal_allocated, 0);
+        const pOut = Math.max(0, pCommitted - paidPrincipal);
         return `
           <div class="exposure-row">
             <div>
@@ -838,7 +880,7 @@ function renderDecision() {
       </div>
       <div>
         <span>Syndication</span>
-        <b>${activeFunding ? (activeFunding.mode === 'fractional' ? `Fractional (${activeFunding.lender_count} Lenders)` : 'Single Lender') : 'Pending'}</b>
+        <b>${activeFunding && !activeFunding.preview ? (activeFunding.mode === 'fractional' ? `Fractional (${activeFunding.lender_count} Lenders)` : 'Single Lender') : 'Pending'}</b>
       </div>
       <div>
         <span>Amortisation</span>
@@ -852,7 +894,7 @@ function renderDecision() {
 
     <div class="report-grid">
       <div class="report-block">
-        <h3>PRIMARY RISK DRIVERS (STATISTICAL ATTRIBUTION)</h3>
+        <h3>POLICY RULE INDICATORS</h3>
         <ul class="report-list">
           ${(ass.risk_drivers || ass.drivers || []).map(d => `
             <li>
@@ -867,8 +909,8 @@ function renderDecision() {
         <h3>DATA INTEGRITY & UNDERWRITING CONTROLS</h3>
         <ul class="report-list">
           <li>
-            <b>Data Quality Index: ${dq.data_quality_score || 92}/100 (${dq.quality_tier || 'ACCEPTABLE'})</b><br>
-            <span>${dq.available_fields_count || 14} of ${dq.total_fields_count || 15} required verification items validated.</span>
+            <b>Data Quality Index: ${dq.data_quality_score ?? 0}/100 (${dq.quality_tier || 'ACCEPTABLE'})</b><br>
+            <span>${dq.available_fields_count ?? 0} of ${dq.total_fields_count || 15} required verification items validated.</span>
           </li>
           <li>
             <b>Anomaly Scan: ${anom.anomaly_detected ? 'ANOMALY DETECTED' : 'CLEAN PROFILE'}</b><br>
@@ -1042,35 +1084,14 @@ async function handleManualSandbox(e) {
 }
 
 // 16. Run Full End-to-End Case Demo Script
-function runFullDemo() {
-  if (demoTimer) clearInterval(demoTimer);
-  showToast('Initiating automated institutional case demonstration workflow...', 'info', 'Demo Walkthrough');
-  showPage('intelligence');
-  runAnalysis().then(() => {
-    let step = 0;
-    demoTimer = setInterval(() => {
-      if (step === 0) {
-        step++;
-        showPage('funding');
-        optimizeFunding();
-      } else if (step === 1) {
-        step++;
-        showPage('repayment');
-        generateRepayment();
-      } else if (step === 2) {
-        step++;
-        showPage('exposure');
-        loadExposurePortfolio();
-      } else if (step === 3) {
-        step++;
-        showPage('decision');
-        renderDecision();
-      } else {
-        clearInterval(demoTimer);
-        demoTimer = null;
-      }
-    }, 1400);
-  });
+async function runFullDemo() {
+  if (demoTimer) return;
+  demoTimer = true;
+  try {
+    await runAnalysis();
+    showPage('decision');
+    showToast('Assessment report ready. Review and commit funding explicitly to continue.', 'info');
+  } finally { demoTimer = null; }
 }
 
 // 17. Bind UI Event Listeners
@@ -1122,8 +1143,8 @@ function bindEvents() {
 
   $('fundingMode')?.addEventListener('change', optimizeFunding);
   $('lenderCount')?.addEventListener('change', optimizeFunding);
-  $('repScheduleType')?.addEventListener('change', generateRepayment);
-  $('repAllocationPolicy')?.addEventListener('change', generateRepayment);
+
+
 
   // Scenario Lab Sliders
   $('scenarioSlider')?.addEventListener('input', updateScenarioLab);
@@ -1133,7 +1154,7 @@ function bindEvents() {
     if (activeCase) {
       $('scenarioSlider').value = activeCase.loan_amount || activeCase.amount;
       $('scenarioCreditSlider').value = activeCase.credit_score || 650;
-      $('scenarioDtiSlider').value = activeCase.dti_ratio || 0.32;
+      $('scenarioDtiSlider').value = activeCase.dti_ratio ?? 0.32;
       updateScenarioLab();
     }
   });

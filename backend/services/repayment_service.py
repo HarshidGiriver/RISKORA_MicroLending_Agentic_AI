@@ -171,95 +171,36 @@ class RepaymentService:
         Splits installment into principal and interest across lenders
         according to the selected institutional allocation policy.
         """
-        allocations = []
-        lender_ids = list(lender_balances.keys())
-        
-        # Interest is always distributed pro-rata based on committed capital share
-        for lid in lender_ids:
-            info = lender_balances[lid]
-            share_ratio = info["share_pct"] / 100.0
-            interest_share = round(interest_comp * share_ratio, 2)
-            info["total_interest_received"] += interest_share
-
-        if policy == "largest-first":
-            # Priority principal to largest outstanding exposure
-            rem_principal = principal_comp
-            # Sort lenders by current outstanding principal descending
-            sorted_lenders = sorted(lender_ids, key=lambda lid: lender_balances[lid]["outstanding_principal"], reverse=True)
-            
-            prin_shares = {lid: 0.0 for lid in lender_ids}
-            for lid in sorted_lenders:
-                if rem_principal <= 0:
-                    break
-                avail = lender_balances[lid]["outstanding_principal"]
-                take = min(avail, rem_principal)
-                prin_shares[lid] = round(take, 2)
-                rem_principal = round(rem_principal - take, 2)
-                
-            for lid in lender_ids:
-                info = lender_balances[lid]
-                p_share = prin_shares[lid]
-                info["outstanding_principal"] = max(0.0, round(info["outstanding_principal"] - p_share, 2))
-                info["total_principal_received"] += p_share
-                
-                share_ratio = info["share_pct"] / 100.0
-                i_share = round(interest_comp * share_ratio, 2)
-                
-                allocations.append({
-                    "lender_id": lid,
-                    "lender_name": info["name"],
-                    "principal_allocated": p_share,
-                    "interest_allocated": i_share,
-                    "total_allocated": round(p_share + i_share, 2)
-                })
-
-        elif policy == "earliest-first":
-            # FIFO: Earlier-funded positions receive priority principal
-            rem_principal = principal_comp
-            prin_shares = {lid: 0.0 for lid in lender_ids}
-            for lid in lender_ids:  # natural insertion order represents funding timestamp
-                if rem_principal <= 0:
-                    break
-                avail = lender_balances[lid]["outstanding_principal"]
-                take = min(avail, rem_principal)
-                prin_shares[lid] = round(take, 2)
-                rem_principal = round(rem_principal - take, 2)
-                
-            for lid in lender_ids:
-                info = lender_balances[lid]
-                p_share = prin_shares[lid]
-                info["outstanding_principal"] = max(0.0, round(info["outstanding_principal"] - p_share, 2))
-                info["total_principal_received"] += p_share
-                
-                share_ratio = info["share_pct"] / 100.0
-                i_share = round(interest_comp * share_ratio, 2)
-                
-                allocations.append({
-                    "lender_id": lid,
-                    "lender_name": info["name"],
-                    "principal_allocated": p_share,
-                    "interest_allocated": i_share,
-                    "total_allocated": round(p_share + i_share, 2)
-                })
+        ids = list(lender_balances)
+        principal_cents = round(principal_comp * 100)
+        interest_cents = round(interest_comp * 100)
+        def split(total, weights):
+            denominator = sum(weights)
+            raw = [total * w / denominator for w in weights]
+            parts = [int(v) for v in raw]
+            for index in sorted(range(len(parts)), key=lambda i: raw[i] - parts[i], reverse=True)[:total-sum(parts)]:
+                parts[index] += 1
+            return parts
+        balances = [round(lender_balances[lid]["outstanding_principal"] * 100) for lid in ids]
+        interest = split(interest_cents, [lender_balances[lid]["share_pct"] for lid in ids])
+        if policy in ("largest-first", "earliest-first"):
+            principal = [0] * len(ids)
+            order = sorted(range(len(ids)), key=lambda i: balances[i], reverse=True) if policy == "largest-first" else range(len(ids))
+            remainder = principal_cents
+            for i in order:
+                principal[i] = min(balances[i], remainder)
+                remainder -= principal[i]
         else:
-            # Default: Pro-Rata Allocation
-            for lid in lender_ids:
-                info = lender_balances[lid]
-                share_ratio = info["share_pct"] / 100.0
-                p_share = round(principal_comp * share_ratio, 2)
-                i_share = round(interest_comp * share_ratio, 2)
-                
-                info["outstanding_principal"] = max(0.0, round(info["outstanding_principal"] - p_share, 2))
-                info["total_principal_received"] += p_share
-                
-                allocations.append({
-                    "lender_id": lid,
-                    "lender_name": info["name"],
-                    "principal_allocated": p_share,
-                    "interest_allocated": i_share,
-                    "total_allocated": round(p_share + i_share, 2)
-                })
-
+            principal = split(principal_cents, balances) if sum(balances) else [0] * len(ids)
+        allocations = []
+        for i, lid in enumerate(ids):
+            info = lender_balances[lid]
+            p, interest_amount = principal[i] / 100, interest[i] / 100
+            info["outstanding_principal"] = (balances[i] - principal[i]) / 100
+            info["total_principal_received"] += p
+            info["total_interest_received"] += interest_amount
+            allocations.append(dict(lender_id=lid, lender_name=info["name"], principal_allocated=p,
+                                    interest_allocated=interest_amount, total_allocated=(principal[i]+interest[i])/100))
         return allocations
 
     @classmethod

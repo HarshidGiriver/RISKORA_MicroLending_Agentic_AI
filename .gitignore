@@ -1,0 +1,27 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local Python environments
+.venv/
+venv/
+
+# Local secrets (keep example configuration trackable)
+.env
+.env.*
+!.env.example
+
+# Temporary SQLite sidecars; keep the existing application database
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Operating-system clutter
+.DS_Store
+Thumbs.db

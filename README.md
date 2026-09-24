@@ -1,115 +1,91 @@
-# RISKORA — AI-Assisted Risk-Based Framework for Digital Micro-Lending
+# RISKORA — micro-lending decision-support prototype
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
-[![Framework](https://img.shields.io/badge/API-Tornado%206.5-green.svg)](https://www.tornadoweb.org/)
-[![ML Model](https://img.shields.io/badge/ML-Calibrated%20HistGBM-orange.svg)](https://scikit-learn.org/)
-[![Tests](https://img.shields.io/badge/Tests-21%20Passed-brightgreen.svg)](tests/)
+RISKORA combines a browser workstation, a Tornado JSON API, SQLite storage, and a calibrated scikit-learn model. The bundled 12,000-row dataset is synthetic. It supports an academic demonstration; real authentication, controlled funding approval, and reliable payment-ledger handling remain future milestones.
 
-RISKORA is an institutional-grade, explainable AI/ML risk intelligence and decision-support platform designed for digital micro-lending. It unifies borrower credit risk prediction, data quality verification, anomaly detection, syndicated funding optimization, and waterfall repayment management into an auditable credit underwriting workstation.
+## First milestone: implemented
 
----
+- Reproducible CPython 3.14 environment with pinned runtime dependencies.
+- Startup validates all three model artifacts and checks inference compatibility before opening the database.
+- One borrower-field schema across API, saved records, data quality, anomalies, and ML inference.
+- Validated loan creation with parameterized SQL, UUIDs, and persistence of all supplied fields.
+- One latest assessment per loan, deterministic timestamp tie-breaking, and corrected verification filters.
+- Unchanged scenarios return zero risk difference; rate and term come from the actual scenario.
+- Static serving is restricted to frontend files and public PNG/MP4 assets. The server binds to loopback by default and does not grant wildcard CORS access.
+- Database-writing tests receive a fresh temporary database per test. Importing application modules no longer initializes storage.
 
-## Key Capabilities
+## Install and run (Windows PowerShell)
 
-### 1. Calibrated Machine Learning Risk Scoring
-- Powered by a scikit-learn **HistGradientBoosting** classifier calibrated via **Sigmoid Platt Scaling** (5-Fold Stratified CV).
-- Predicts true statistical **Probability of Default (PD)** mapped to an institutional risk score ($0–100$) and risk bands (**Low**, **Medium**, **High**).
-- Tested on 1,800 unseen loan records: **ROC-AUC 0.7919**, **PR-AUC 0.4023**, and **Brier Score Loss 0.0821**.
-- **Proven Default Rate Separation**: Observed default rates escalate monotonically from **3.75%** (Low Risk) to **13.41%** (Medium Risk) to **36.20%** (High Risk).
+Use CPython 3.14, the runtime used for local verification. Run these commands from the project directory:
 
-### 2. Local Explainability & Feature Attribution
-- Real-time feature attribution identifying specific upward pressure drivers (+pts) and protective mitigators (-pts).
-- Clear regulatory disclosure distinguishing statistical correlation from deterministic causal laws.
-
-### 3. Data Quality & Anomaly Detection Engines
-- **Data Quality Engine**: Evaluates completeness and validity across 8 required and 7 optional fields, independent of default risk.
-- **Anomaly Engine**: Multivariate statistical scan detecting extreme leverage spikes, demographic contradictions, and data entry inconsistencies.
-
-### 4. Syndicated Funding Optimizer
-- Single-Lender vs. Fractional Multi-Lender syndication.
-- Computes capital commitments and **Herfindahl-Hirschman Index (HHI)** concentration metrics.
-- Highlights the foundational risk distinction: *Fractional funding distributes lender concentration risk; it does not alter borrower default probability.*
-
-### 5. Multi-Schedule Amortisation & Waterfall Repayment
-- Generates schedules across **Fixed Monthly**, **Fixed Bi-Monthly (24 periods/yr)**, and **Flexible Payment Windows**.
-- Applies multi-lender waterfall policies: **Pro-Rata Allocation** (default), **Largest Contribution First (LCF Waterfall)**, and **Earliest Funding First (FIFO)**.
-- Penny-perfect balance reconciliation ensuring the final balance closes at exactly ₹0.00.
-- Interactive payment recording updating persistent ledger entries in real time.
-
-### 6. Interactive What-If Scenario Lab
-- Stress-test loan amounts, credit scores, and DTI ratios against the live ML inference service without altering saved loan records.
-
-### 7. Dataset Explorer & Target Leakage Prevention
-- Server-side paginated, filterable, and sortable explorer across 12,000 benchmark loan records.
-- Ground truth `Default` is strictly isolated for post-hoc validation and never fed into feature matrices.
-
----
-
-## System Architecture
-
-```
-RISKORA Workstation (HTML5 / ES6+ / CSS3)
-        │
-        ▼  [Asynchronous REST API / JSON]
-Tornado Backend Gateway (Port 8000)
-   ├── Auth Service (/api/auth/login)
-   ├── Loan Service (/api/loans)
-   ├── Risk Intelligence (/api/risk/analyze & /simulate)
-   ├── Funding Optimizer (/api/funding/optimize)
-   ├── Repayment Engine (/api/repayment/generate & /record)
-   ├── Exposure Monitor (/api/exposure/portfolio)
-   └── Dataset Explorer (/api/dataset/explorer & /model/metrics)
-        │
-        ├── ML Engine (Calibrated HistGradientBoosting + Platt Scaling)
-        ├── Data Quality Engine & Anomaly Detector
-        └── Relational Storage (SQLite: data/riskora.db)
-```
-
----
-
-## Quick Start Guide
-
-### Prerequisites
-- Python 3.10+ (Python 3.12 verified)
-- Standard Python libraries (`scikit-learn`, `pandas`, `numpy`, `tornado`, `joblib`)
-
-### 1. Launch the Platform
-From the `RISKORA_V1_0_Updated` directory:
 ```powershell
-python run.py
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe run.py --check
+.\.venv\Scripts\python.exe run.py
 ```
-This automatically verifies benchmark data and model artifacts, initializes the database, and starts the workstation.
 
-### 2. Access the Workstation
-Open your web browser to:
-```
-http://localhost:8000
-```
-Enter your reviewer name (e.g. `Dr. Reviewer`) to enter the workstation.
+Open `http://127.0.0.1:8000`. If the requested port is occupied, startup tries the next nine ports and prints the selected address. To request another port, use `run.py 8080`.
 
-### 3. Run Automated Tests
-```powershell
-python -m unittest discover tests
-```
-Executes all 21 unit and integration tests (**100% pass rate in ~4.6s**).
+On Linux/macOS, use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe`. CI is configured for Windows and Linux; only Windows was executed locally for this milestone.
 
----
+The reviewer-name entry screen is a demo identity label, not authentication. Keep this build local while authentication and payment controls are unfinished.
 
-## Documentation Index
+## Configuration
 
-| Document | Purpose |
+Environment variables are read at process startup. Relative paths resolve from the project root, regardless of the shell's working directory.
+
+| Variable | Default |
 |---|---|
-| [**ARCHITECTURE.md**](ARCHITECTURE.md) | Complete architectural blueprint with 9 detailed Mermaid diagrams. |
-| [**ML_PIPELINE.md**](ML_PIPELINE.md) | Machine learning pipeline, benchmark evaluation, calibration, and metrics. |
-| [**MODEL_CARD.md**](MODEL_CARD.md) | Formal model card covering intended uses, performance, fairness, and limits. |
-| [**DATA_DICTIONARY.md**](DATA_DICTIONARY.md) | Schema, data types, value ranges, and handling strategies for all 18 features. |
-| [**API_DOCUMENTATION.md**](API_DOCUMENTATION.md) | Complete REST API specification with request/response schemas. |
-| [**DATABASE_SCHEMA.md**](DATABASE_SCHEMA.md) | Relational schema, DDL statements, and entity-relationship diagram. |
-| [**TESTING.md**](TESTING.md) | Comprehensive test suite overview, test matrix, and verification logs. |
-| [**DEMO_GUIDE.md**](DEMO_GUIDE.md) | Minute-by-minute 15-minute presentation script for faculty demonstration. |
-| [**FACULTY_QA.md**](FACULTY_QA.md) | In-depth technical answers to 19 challenging faculty evaluation questions. |
+| `RISKORA_HOST` | `127.0.0.1` |
+| `RISKORA_PORT` | `8000` |
+| `RISKORA_DB_PATH` | `data/riskora.db` |
+| `RISKORA_DATA_PATH` | `data/loan_default_full.csv` |
+| `RISKORA_ARTIFACTS_DIR` | `ml/artifacts` |
 
----
+`.env.example` documents the values; `.env` files are not automatically loaded. For a separate demo database:
 
-## Decision-Support Disclaimer
-RISKORA is an institutional decision-support system. It generates probabilistic risk signals and quantitative recommendations to assist qualified credit underwriters. Final lending authority, policy compliance, and loan disbursal decisions remain the sole responsibility of authorized human underwriters.
+```powershell
+$env:RISKORA_DB_PATH = "data/local-demo.db"
+.\.venv\Scripts\python.exe run.py
+```
+
+An empty/new database is initialized and seeded only when starting the server. Existing data is preserved. `run.py --check` does not create or mutate a database.
+
+## Model artifacts and dataset
+
+Startup requires `riskora_model.joblib`, `preprocessor.joblib`, and `model_metrics.json`. Missing, empty, corrupt, incompatible-version, or structurally inconsistent artifacts cause startup to fail with a message. Startup never implicitly retrains or overwrites artifacts.
+
+To intentionally regenerate the synthetic dataset or retrain (these commands overwrite their configured output files):
+
+```powershell
+.\.venv\Scripts\python.exe -m ml.generate_data
+.\.venv\Scripts\python.exe -m ml.train
+```
+
+The removed sample CSV is no longer used as a fallback. The explorer returns 503 if the configured full dataset is unavailable.
+
+The supplied artifacts were serialized with scikit-learn 1.9.1, which is pinned in `requirements.txt`. Their recorded test ROC-AUC is 0.7919, average precision 0.4023, and Brier score 0.0821 on the synthetic held-out split. Existing fixed explanation points are policy heuristics, not model-specific attribution. The explorer still uses a heuristic estimate rather than the calibrated model; that distinction is scheduled for the trustworthy-ML phase.
+
+## Verification
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+node --check app.js
+```
+
+Node is optional and only needed for the JavaScript syntax check. See `TESTING.md` for regression coverage. The test fixtures override the configured database path before initialization and remove their temporary databases after each test.
+
+## API and loan creation
+
+The new-loan API is working; the browser creation form belongs to the next workflow milestone. `POST /api/loans` requires `name` plus the eight required numeric fields described in `DATA_DICTIONARY.md`; optional demographic fields remain missing when omitted. Invalid input receives HTTP 400 without creating borrower/loan rows. See `API_DOCUMENTATION.md` for a complete example.
+
+## Next milestones, in order
+
+1. Complete workflow: explicit loan transitions, human review, preview versus commit, frontend loan creation and reliable restoration/report rendering.
+2. Financial correctness: partial and duplicate payments, exact lender allocations, versioned schedules, actual outstanding exposure.
+3. Trustworthy ML: accurate UI labels, prediction-source consistency, model-specific explanations and real-data evaluation.
+4. Security/accountability: credentials, sessions, roles, authorization and reviewer-linked audit trails.
+5. Deployment: migrations, health checks, logging, backup/restore and operational documentation.
+
+`PROJECT_ANALYSIS.md` records the original audit before this milestone. The detailed architecture/model/demo documents also contain older claims and are not evidence that later milestones are implemented. This README, the current API/data dictionary, tests, and source describe the first-milestone behavior.

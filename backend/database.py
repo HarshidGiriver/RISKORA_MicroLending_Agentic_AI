@@ -8,15 +8,22 @@ import os
 import sqlite3
 import json
 import datetime
+from contextlib import contextmanager
+from backend.config import DB_PATH as CONFIG_DB_PATH
 from typing import Dict, Any, List, Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "riskora.db")
+DB_PATH = str(CONFIG_DB_PATH)
 
-def get_connection() -> sqlite3.Connection:
+@contextmanager
+def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 def init_db():
     """Initializes schema and tables."""
@@ -226,6 +233,4 @@ def seed_default_cases():
             
         conn.commit()
 
-# Ensure initialized and seeded when imported
-init_db()
-seed_default_cases()
+# Initialization is explicit at startup or in an isolated test fixture.

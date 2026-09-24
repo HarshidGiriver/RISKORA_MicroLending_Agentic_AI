@@ -1,75 +1,65 @@
-# RISKORA — Quality Assurance & Testing Suite
+# RISKORA testing
 
----
+Run from the repository root using the pinned virtual environment:
 
-## 1. Test Architecture & Coverage
-
-RISKORA features a comprehensive automated testing suite structured across unit, domain, and API integration boundaries.
-
-```
-tests/
-├── test_riskora.py          # Domain & unit test suite (12 tests)
-└── test_api_integration.py # Tornado asynchronous REST API integration suite (9 tests)
-```
-
-Total Automated Tests: **21 passing tests (100% success rate)**.
-
----
-
-## 2. Test Execution Commands
-
-From the project root directory (`RISKORA_V1_0_Updated`):
-
-### Run All Automated Tests
 ```powershell
-python -m unittest discover tests
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe run.py --check
+.\.venv\Scripts\python.exe -m pip check
+node --check app.js
 ```
 
-### Run Domain & Unit Tests Only
-```powershell
-python -m unittest tests/test_riskora.py
-```
+## Isolation
 
-### Run API Integration Tests Only
-```powershell
-python -m unittest tests/test_api_integration.py
-```
+`backend.database` has no import-time storage writes. `tests/support.py` patches the database path to a new temporary SQLite file before initializing/seeding each database-writing test. Connections commit/roll back and explicitly close. The fixture restores the previous path and removes temporary files during cleanup, including on failure. Tests do not depend on accumulated demo data.
 
----
+## Coverage
 
-## 3. Test Coverage Matrix
+| Module | Tests | Coverage |
+|---|---:|---|
+| `tests/test_riskora.py` | 12 | ML sample profiles, quality, anomalies, funding, schedules and seed records |
+| `tests/test_api_integration.py` | 10 | Existing API happy paths and payment endpoints |
+| `tests/test_foundation.py` | 26 | Static file restrictions, creation/validation/rollback, mapping parity, scenarios, queue/filter correctness, startup/artifact checks and isolation |
 
-| Test Module | Test Case | Target Component | Verification Objective | Result |
-|---|---|---|---|:---:|
-| `test_riskora.py` | `test_high_risk_inference` | `ml.infer.RiskInferenceEngine` | Validates that high-hazard applicant produces $PD \ge 0.20$, Risk Level `HIGH`, and top upward drivers. | **PASS** |
-| `test_riskora.py` | `test_low_risk_inference` | `ml.infer.RiskInferenceEngine` | Validates that prime applicant produces $PD < 0.08$, Risk Level `LOW`, and protective mitigators. | **PASS** |
-| `test_riskora.py` | `test_complete_profile` | `backend.services.data_quality` | Asserts complete documentation achieves score $\ge 85$ and `EXCELLENT` tier. | **PASS** |
-| `test_riskora.py` | `test_missing_and_contradictory` | `backend.services.data_quality` | Asserts missing income and impossible tenure (10y tenure @ age 20) triggers contradiction flags. | **PASS** |
-| `test_riskora.py` | `test_normal_profile` | `backend.services.anomaly_detector` | Asserts standard borrower profile produces zero anomaly flags and `NORMAL` status. | **PASS** |
-| `test_riskora.py` | `test_extreme_leverage_anomaly` | `backend.services.anomaly_detector` | Asserts $3.3\times$ debt overhang triggers `EXTREME_LEVERAGE_ANOMALY`. | **PASS** |
-| `test_riskora.py` | `test_single_lender_funding` | `backend.services.funding_service` | Confirms sole lender receives $100\%$ share and Herfindahl Index (HHI) equals $10,000$. | **PASS** |
-| `test_riskora.py` | `test_fractional_funding` | `backend.services.funding_service` | Confirms syndication across $3$ lenders sums to exactly $100.0\%$ and exact loan amount. | **PASS** |
-| `test_riskora.py` | `test_amortisation_zero_balance`| `backend.services.repayment_service` | Validates annuity formula, principal/interest split, and exact final payment balance to $₹0.00$. | **PASS** |
-| `test_riskora.py` | `test_bi_monthly_schedule` | `backend.services.repayment_service` | Validates 24-period annual frequency ($6$ months $= 12$ installments). | **PASS** |
-| `test_riskora.py` | `test_waterfall_allocation` | `backend.services.repayment_service` | Verifies Largest Contribution First (LCF) waterfall reconciles $100\%$ of payments without loss. | **PASS** |
-| `test_riskora.py` | `test_seed_cases_exist` | `backend.database` | Verifies SQLite tables and 6 core seed cases (Rahul P, Arun Kumar, etc.) populate on boot. | **PASS** |
-| `test_api_integration.py` | `test_health_endpoint` | `/api/health` | Verifies `200 OK` and `OPERATIONAL` status. | **PASS** |
-| `test_api_integration.py` | `test_loans_list` | `/api/loans` | Verifies loan request queue returns seeded records with borrower joins. | **PASS** |
-| `test_api_integration.py` | `test_loan_detail` | `/api/loans/LR-1054` | Verifies single loan retrieval with assessment, funding, and repayment state. | **PASS** |
-| `test_api_integration.py` | `test_risk_analysis_endpoint`| `/api/risk/analyze` | Verifies end-to-end ML inference, drivers, data quality, and anomaly payload. | **PASS** |
-| `test_api_integration.py` | `test_scenario_simulate` | `/api/risk/simulate` | Verifies What-If sensitivity recalculation and comparison deltas. | **PASS** |
-| `test_api_integration.py` | `test_funding_optimize` | `/api/funding/optimize` | Verifies syndication calculation and HHI computation. | **PASS** |
-| `test_api_integration.py` | `test_repayment_generate` | `/api/repayment/generate` | Verifies amortisation schedule generation. | **PASS** |
-| `test_api_integration.py` | `test_dataset_explorer` | `/api/dataset/explorer` | Verifies server-side pagination, summary stats, and target isolation. | **PASS** |
-| `test_api_integration.py` | `test_model_metrics` | `/api/model/metrics` | Verifies live test set ROC-AUC, PR-AUC, confusion matrix, and feature weights. | **PASS** |
+Foundation regressions include:
 
----
+- Private files and encoded traversal paths cannot be downloaded; frontend assets still load.
+- No wildcard CORS grant.
+- Names and education containing apostrophes persist safely; all profile fields survive creation/reload.
+- Missing required values, non-finite numbers, invalid categories and malformed/non-object JSON are rejected without creating rows.
+- ID-only and canonical input predictions, data quality and anomaly results match.
+- Unchanged scenarios have zero delta; alternative aliases override saved fields; zero interest works.
+- Unknown loans and invalid scenarios return useful 4xx responses.
+- Repeated analyses and tied timestamps produce one latest queue/portfolio assessment per loan.
+- Verification filters include missing and contradictory profiles without failing on null values.
+- Re-analysis preserves REPAYING status; missing saved required fields route to NEEDS_VERIFICATION.
+- Invalid quality inputs cannot crash or be reported verification-ready.
+- Connections roll back on failure and close explicitly.
+- Missing/empty/corrupt artifacts and invalid metrics fail startup; startup/import checks do not write storage or silently retrain.
+- Literal explorer searches and empty results produce valid JSON; the deleted sample CSV is not a fallback.
 
-## 4. Test Verification Output
-```text
-----------------------------------------------------------------------
-Ran 21 tests in 4.667s
+## CI
 
-OK
-```
-All critical calculations, ML predictions, and API contracts are fully validated.
+`.github/workflows/tests.yml` installs pinned dependencies, checks their consistency, validates startup and runs tests on Windows/Linux with Python 3.14. Remote CI results require a push; adding the workflow does not mean CI has already executed.
+
+## Boundaries
+
+Local verification on 24 September 2026: **48 tests passed in 16.081 seconds** in a fresh pinned Windows virtual environment. Startup validation, dependency consistency, JavaScript syntax, and Git whitespace checks passed. The server-launch regression initialized a temporary database and served its six seeded loans. SHA-256 checks confirmed the application database and all three model artifacts remained unchanged. Remote CI has not been run.
+
+Payment tests still describe the existing happy-path behavior, not validated accounting. Partial/duplicate/negative payment control, schedule versions, end-to-end browser workflow, real authentication, deployment load, and screen-reader behavior remain later work. The upstream Joblib/NumPy artifact loader can emit a NumPy shape-assignment deprecation warning; it is not a version mismatch or test failure.
+
+
+## Frontend integration verification (2026-09-24)
+
+Isolated browser QA confirmed report navigation, exact scenario baseline (credit 548,
+zero PD difference), accessibility state, saved repayment terms, lender summaries after
+payment, principal exposure before payment, clearing results when changing borrowers,
+and mobile navigation without page-wide overflow. No browser console errors occurred.
+The 50-test suite includes persistence and payment-guard regressions plus exact cent
+allocation for all three repayment policies.
+
+Funding previews do not save commitments. Schedule dropdowns do not save automatically.
+Payments require a pre-existing schedule and exact installment amount; duplicate
+payments are rejected and paid loans cannot be reconfigured. Partial payments and
+full schedule-version migrations remain future work. Reviewer names are labels,
+not authentication; this is still a local demonstration, not a production lending system.

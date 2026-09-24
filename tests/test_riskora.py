@@ -26,6 +26,7 @@ from backend.services.anomaly_detector import AnomalyDetector
 from backend.services.funding_service import FundingService
 from backend.services.repayment_service import RepaymentService
 from backend.database import get_connection, init_db, seed_default_cases
+from tests.support import IsolatedDatabaseMixin
 
 class TestRiskoraML(unittest.TestCase):
     @classmethod
@@ -177,11 +178,7 @@ class TestRepaymentService(unittest.TestCase):
             total_allocated = sum(a["total_allocated"] for a in inst["allocations"])
             self.assertAlmostEqual(total_allocated, inst["payment_amount"], places=1)
 
-class TestDatabasePersistence(unittest.TestCase):
-    def setUp(self):
-        init_db()
-        seed_default_cases()
-
+class TestDatabasePersistence(IsolatedDatabaseMixin, unittest.TestCase):
     def test_seed_cases_exist(self):
         with get_connection() as conn:
             cursor = conn.cursor()

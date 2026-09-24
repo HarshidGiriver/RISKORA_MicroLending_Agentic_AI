@@ -5,6 +5,7 @@ patterns. Serves strictly as a decision-support indicator for enhanced underwrit
 """
 
 from typing import Dict, Any, List
+from backend.schema import inspect_profile
 
 class AnomalyDetector:
     # Empirical benchmark distributions for micro-lending
@@ -13,6 +14,7 @@ class AnomalyDetector:
     
     @classmethod
     def evaluate(cls, raw: Dict[str, Any]) -> Dict[str, Any]:
+        raw, _ = inspect_profile(raw)
         def num(val, default=None):
             try:
                 if val is None or str(val).strip() == "":
@@ -21,12 +23,12 @@ class AnomalyDetector:
             except (ValueError, TypeError):
                 return default
 
-        income = num(raw.get("Income") or raw.get("income") or raw.get("annualIncome"))
-        loan_amount = num(raw.get("LoanAmount") or raw.get("loanAmount") or raw.get("amount"))
-        credit_score = num(raw.get("CreditScore") or raw.get("creditScore") or raw.get("credit"))
-        dti = num(raw.get("DTIRatio") or raw.get("dtiRatio") or raw.get("dti"))
-        age = num(raw.get("Age") or raw.get("age"))
-        emp_months = num(raw.get("MonthsEmployed") or raw.get("monthsEmployed") or raw.get("empMonths"))
+        income = num(raw.get("Income"))
+        loan_amount = num(raw.get("LoanAmount"))
+        credit_score = num(raw.get("CreditScore"))
+        dti = num(raw.get("DTIRatio"))
+        age = num(raw.get("Age"))
+        emp_months = num(raw.get("MonthsEmployed"))
         
         indicators = []
         anomaly_score = 0.0  # 0.0 (clean) to 1.0 (highly anomalous)
@@ -82,7 +84,7 @@ class AnomalyDetector:
                 anomaly_score += 0.12
 
         # 4. Demographic / Employment Irregularities
-        if age and emp_months:
+        if age is not None and emp_months is not None:
             if age <= 22 and emp_months > 60:
                 indicators.append({
                     "type": "IRREGULAR_EMPLOYMENT_TIMELINE",

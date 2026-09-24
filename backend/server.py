@@ -10,6 +10,7 @@ import sys
 import json
 import sqlite3
 import datetime
+import uuid
 import numpy as np
 import pandas as pd
 import tornado.ioloop
@@ -19,18 +20,25 @@ import tornado.web
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from backend.database import get_connection, init_db, seed_default_cases
+from backend.config import PROJECT_ROOT, DATA_PATH, ARTIFACTS_DIR, HOST, PORT
+from backend.schema import validate_profile, ProfileValidationError, inference_profile
 from ml.infer import RiskInferenceEngine
 from backend.services.data_quality import DataQualityEngine
 from backend.services.anomaly_detector import AnomalyDetector
 from backend.services.funding_service import FundingService
 from backend.services.repayment_service import RepaymentService
 
-# Base Handler with JSON utilities and CORS support
+
+def request_profile(raw, require_required=False):
+    try:
+        return validate_profile(raw, require_required=require_required)
+    except ProfileValidationError as error:
+        raise tornado.web.HTTPError(400, reason=str(error)) from error
+
+# Same-origin JSON API utilities. Authentication is a later milestone.
 class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        self.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.set_header("X-Content-Type-Options", "nosniff")
 
     def options(self, *args, **kwargs):
         self.set_status(204)
@@ -38,21 +46,23 @@ class BaseHandler(tornado.web.RequestHandler):
 
     def get_json_body(self):
         try:
-            return json.loads(self.request.body.decode("utf-8")) if self.request.body else {}
-        except Exception:
-            return {}
+            body = json.loads(self.request.body.decode("utf-8")) if self.request.body else {}
+        except (ValueError, UnicodeError):
+            raise tornado.web.HTTPError(400, reason="Request body must contain valid JSON.")
+        if not isinstance(body, dict):
+            raise tornado.web.HTTPError(400, reason="Request body must be a JSON object.")
+        return body
 
     def write_json(self, data, status=200):
         self.set_status(status)
         self.set_header("Content-Type", "application/json")
-        self.write(json.dumps(data, indent=2))
+        self.write(json.dumps(data, indent=2, allow_nan=False))
 
     def write_error(self, status_code, **kwargs):
         self.set_header("Content-Type", "application/json")
-        exc_info = kwargs.get("exc_info")
         error_msg = "Internal Server Error"
-        if exc_info and len(exc_info) > 1 and exc_info[1]:
-            error_msg = str(exc_info[1])
+        if status_code < 500:
+            error_msg = self._reason
         self.finish(json.dumps({"error": error_msg, "status": status_code}))
 
 # 1. Health & Status Handler
@@ -96,19 +106,24 @@ class LoansHandler(BaseHandler):
     def get(self):
         search = self.get_argument("search", "").strip().lower()
         filter_status = self.get_argument("filter", "all").strip().lower()
+        if filter_status not in {"all", "high", "analyzed", "incomplete"}:
+            raise tornado.web.HTTPError(400, reason="Unknown loan filter.")
         
         with get_connection() as conn:
             cursor = conn.cursor()
             query = """
             SELECT l.id, l.loan_amount, l.credit_score, l.dti_ratio, l.num_credit_lines,
                    l.interest_rate, l.loan_term, l.loan_purpose, l.status, l.created_at,
-                   b.name as borrower_name, b.income, b.employment_type, b.months_employed,
-                   b.education, b.has_cosigner, b.has_mortgage, b.has_dependents,
+                   b.name as borrower_name, b.age, b.income, b.employment_type, b.months_employed,
+                   b.education, b.marital_status, b.has_cosigner, b.has_mortgage, b.has_dependents,
                    r.risk_score, r.probability_of_default, r.risk_level, r.data_quality_score, r.anomaly_detected
             FROM loans l
             JOIN borrowers b ON l.borrower_id = b.id
-            LEFT JOIN risk_assessments r ON l.id = r.loan_id
-            ORDER BY l.created_at DESC;
+            LEFT JOIN risk_assessments r ON r.id = (
+                SELECT latest.id FROM risk_assessments latest WHERE latest.loan_id = l.id
+                ORDER BY latest.assessed_at DESC, latest.id DESC LIMIT 1
+            )
+            ORDER BY l.created_at DESC, l.id DESC;
             """
             rows = cursor.execute(query).fetchall()
             
@@ -126,7 +141,7 @@ class LoansHandler(BaseHandler):
                     continue
                 if filter_status == "analyzed" and not item.get("risk_level"):
                     continue
-                if filter_status == "incomplete" and (item.get("income") is None or item.get("credit_score") is None or item.get("data_quality_score", 100) < 70):
+                if filter_status == "incomplete" and DataQualityEngine.evaluate(item)["verification_ready"]:
                     continue
                     
                 results.append(item)
@@ -135,34 +150,39 @@ class LoansHandler(BaseHandler):
 
     def post(self):
         data = self.get_json_body()
-        name = data.get("name", "").strip() or "Anonymous Borrower"
-        income = float(data.get("income", 300000))
-        loan_amount = float(data.get("loanAmount", 100000))
-        credit_score = int(data.get("creditScore", 650))
-        dti = float(data.get("dti", 0.30))
-        term = int(data.get("term", 36))
-        purpose = data.get("purpose", "General Micro-Enterprise")
-        emp_type = data.get("employmentType", "Salaried")
-        months_emp = int(data.get("monthsEmployed", 24))
+        name = data.get("name")
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 200:
+            raise tornado.web.HTTPError(400, reason="Borrower name is required (1-200 characters).")
+        name = name.strip()
+        profile = request_profile(data, require_required=True)
+        dq = DataQualityEngine.evaluate(profile)
+        status = "REQUEST_RECEIVED" if dq["verification_ready"] else "NEEDS_VERIFICATION"
         
         with get_connection() as conn:
             cursor = conn.cursor()
-            bid = f"BRW-{datetime.datetime.now().strftime('%M%S%f')[:7]}"
-            lid = f"LR-{datetime.datetime.now().strftime('%M%S%f')[:6]}"
+            bid = f"BRW-{uuid.uuid4().hex}"
+            lid = f"LR-{uuid.uuid4().hex}"
             
             cursor.execute("""
-            INSERT INTO borrowers (id, name, income, education, employment_type, months_employed)
-            VALUES (?, ?, ?, 'Bachelor\'s', ?, ?);
-            """, (bid, name, income, emp_type, months_emp))
+            INSERT INTO borrowers (id, name, age, income, education, employment_type,
+                                   months_employed, marital_status, has_dependents, has_mortgage, has_cosigner)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (bid, name, profile.get("Age"), profile["Income"], profile.get("Education"),
+                  profile.get("EmploymentType"), profile["MonthsEmployed"], profile.get("MaritalStatus"),
+                  profile.get("HasDependents"), profile.get("HasMortgage"), profile.get("HasCoSigner")))
             
             cursor.execute("""
-            INSERT INTO loans (id, borrower_id, loan_amount, credit_score, dti_ratio, loan_term, loan_purpose, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'REQUEST_RECEIVED');
-            """, (lid, bid, loan_amount, credit_score, dti, term, purpose))
+            INSERT INTO loans (id, borrower_id, loan_amount, credit_score, dti_ratio,
+                               num_credit_lines, interest_rate, loan_term, loan_purpose, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (lid, bid, profile["LoanAmount"], profile["CreditScore"], profile["DTIRatio"],
+                  profile["NumCreditLines"], profile["InterestRate"], profile["LoanTerm"],
+                  profile.get("LoanPurpose"), status))
             
             conn.commit()
             
-        self.write_json({"success": True, "loan_id": lid, "borrower_id": bid})
+        self.write_json({"success": True, "loan_id": lid, "borrower_id": bid,
+                         "status": status, "data_quality": dq}, status=201)
 
 # 4. Single Loan Detail Handler
 class LoanDetailHandler(BaseHandler):
@@ -186,7 +206,7 @@ class LoanDetailHandler(BaseHandler):
             
             # Fetch latest assessment
             assessment_row = cursor.execute("""
-            SELECT * FROM risk_assessments WHERE loan_id = ? ORDER BY assessed_at DESC LIMIT 1;
+            SELECT * FROM risk_assessments WHERE loan_id = ? ORDER BY assessed_at DESC, id DESC LIMIT 1;
             """, (loan_id,)).fetchone()
             
             if assessment_row:
@@ -201,28 +221,47 @@ class LoanDetailHandler(BaseHandler):
                 ass_dict["data_quality"] = json.loads(ass_dict.get("dq_details_json") or "{}")
                 ass_dict["anomaly_indicators"] = json.loads(ass_dict.get("anomaly_details_json") or "{}")
                 ass_dict["anomaly"] = ass_dict["anomaly_indicators"]
+                ass_dict["recommended_action"] = "Human review required. " + ("Escalate to senior underwriter." if ass_dict["risk_level"] == "HIGH" else "Verify borrower documentation before a decision.")
+                ass_dict["explainability_disclosure"] = "Policy rule indicators; these points are not trained-model feature attributions."
                 loan_data["assessment"] = ass_dict
             else:
                 loan_data["assessment"] = None
 
             # Fetch funding position
             funding_row = cursor.execute("""
-            SELECT * FROM funding_positions WHERE loan_id = ? ORDER BY funded_at DESC LIMIT 1;
+            SELECT * FROM funding_positions WHERE loan_id = ? ORDER BY funded_at DESC, id DESC LIMIT 1;
             """, (loan_id,)).fetchone()
             if funding_row:
                 fund_dict = dict(funding_row)
                 fund_dict["positions"] = json.loads(fund_dict.get("positions_json") or "[]")
+                positions = fund_dict["positions"]
+                fund_dict.update(total_requested=round(sum(p["committed_amount"] for p in positions), 2),
+                                 lender_count=len(positions),
+                                 largest_lender_share=max((p["share_pct"] for p in positions), default=0),
+                                 concentration_description=f"Saved allocation across {len(positions)} lenders.")
                 loan_data["funding"] = fund_dict
             else:
                 loan_data["funding"] = None
 
             # Fetch repayment schedule
             repay_row = cursor.execute("""
-            SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC LIMIT 1;
+            SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC, id DESC LIMIT 1;
             """, (loan_id,)).fetchone()
             if repay_row:
                 rep_dict = dict(repay_row)
                 rep_dict["installments"] = json.loads(rep_dict.get("installments_json") or "[]")
+                rep_dict.update(original_principal=rep_dict["principal"],
+                                annual_interest_rate=rep_dict["annual_rate"],
+                                num_installments=len(rep_dict["installments"]),
+                                allocation_policy_description=RepaymentService._get_policy_description(rep_dict["allocation_policy"]))
+                summaries = {}
+                for installment in rep_dict["installments"]:
+                    for allocation in installment.get("allocations", []):
+                        item = summaries.setdefault(allocation["lender_id"], dict(lender_id=allocation["lender_id"], lender_name=allocation["lender_name"], expected_principal=0, expected_interest=0, total_expected_return=0))
+                        item["expected_principal"] += allocation["principal_allocated"]
+                        item["expected_interest"] += allocation["interest_allocated"]
+                        item["total_expected_return"] += allocation["total_allocated"]
+                rep_dict["lender_summary"] = list(summaries.values())
                 loan_data["repayment"] = rep_dict
             else:
                 loan_data["repayment"] = None
@@ -250,9 +289,11 @@ class RiskAnalysisHandler(BaseHandler):
                 """, (loan_id,)).fetchone()
                 if row:
                     loan_record = dict(row)
+                else:
+                    raise tornado.web.HTTPError(404, reason="Loan not found.")
                     
         # Overlay with any passed body fields
-        combined = {**loan_record, **data}
+        combined = {**request_profile(loan_record), **request_profile(data)}
         
         # 1. Run Data Quality Engine
         dq_results = DataQualityEngine.evaluate(combined)
@@ -290,7 +331,9 @@ class RiskAnalysisHandler(BaseHandler):
                 ))
                 
                 # Update loan status to RISK_ASSESSED
-                cursor.execute("UPDATE loans SET status = 'RISK_ASSESSED' WHERE id = ?;", (loan_id,))
+                cursor.execute("""UPDATE loans SET status = ? WHERE id = ?
+                    AND status IN ('REQUEST_RECEIVED', 'NEEDS_VERIFICATION', 'RISK_ASSESSED');""",
+                    ("RISK_ASSESSED" if dq_results["verification_ready"] else "NEEDS_VERIFICATION", loan_id))
                 
                 # Audit log
                 cursor.execute("""
@@ -322,6 +365,8 @@ class ScenarioSimulationHandler(BaseHandler):
     def post(self):
         data = self.get_json_body()
         base_loan_id = data.get("baseLoanId")
+        if not base_loan_id:
+            raise tornado.web.HTTPError(400, reason="baseLoanId is required.")
         
         base_record = {}
         if base_loan_id:
@@ -337,15 +382,17 @@ class ScenarioSimulationHandler(BaseHandler):
                 """, (base_loan_id,)).fetchone()
                 if row:
                     base_record = dict(row)
+                else:
+                    raise tornado.web.HTTPError(404, reason="Base loan not found.")
 
         engine = RiskInferenceEngine.get_instance()
         
         # 1. Base prediction
-        base_input = {**base_record}
+        base_input = request_profile(base_record)
         base_res = engine.predict(base_input)
         
         # 2. Scenario prediction with modified parameters
-        scenario_input = {**base_record, **data.get("scenario", {})}
+        scenario_input = {**base_input, **request_profile(data.get("scenario", {}))}
         scenario_res = engine.predict(scenario_input)
         
         # Compute deltas
@@ -353,10 +400,10 @@ class ScenarioSimulationHandler(BaseHandler):
         pd_delta_pts = round((scenario_res["probability_of_default"] - base_res["probability_of_default"]) * 100, 2)
         
         # Indicative EMI for scenario
-        sim_amt = float(scenario_input.get("LoanAmount", scenario_input.get("loan_amount", 120000)))
-        sim_term = int(scenario_input.get("LoanTerm", scenario_input.get("loan_term", 36)))
-        sim_rate = 0.12 / 12.0
-        emi = sim_amt * sim_rate * ((1 + sim_rate) ** sim_term) / (((1 + sim_rate) ** sim_term) - 1)
+        normalized = inference_profile(scenario_input)
+        sim_amt, sim_term = normalized["LoanAmount"], normalized["LoanTerm"]
+        sim_rate = normalized["InterestRate"] / 1200.0
+        emi = sim_amt / sim_term if sim_rate == 0 else sim_amt * sim_rate * ((1 + sim_rate) ** sim_term) / (((1 + sim_rate) ** sim_term) - 1)
         
         self.write_json({
             "base": {
@@ -389,6 +436,8 @@ class FundingHandler(BaseHandler):
         mode = data.get("mode", "auto")
         lender_count = int(data.get("lenderCount", 3))
         
+        if not np.isfinite(amount) or amount <= 0 or mode not in ("auto", "single", "fractional"):
+            raise tornado.web.HTTPError(400, reason="Provide a positive amount and valid funding mode.")
         funding_result = FundingService.calculate_structure(
             loan_amount=amount,
             risk_level=risk_level,
@@ -396,6 +445,12 @@ class FundingHandler(BaseHandler):
             lender_count=lender_count
         )
         
+        if loan_id:
+            with get_connection() as conn:
+                if not conn.execute("SELECT id FROM loans WHERE id = ?", (loan_id,)).fetchone():
+                    raise tornado.web.HTTPError(404, reason="Loan not found.")
+                if conn.execute("SELECT id FROM payments WHERE loan_id = ? LIMIT 1", (loan_id,)).fetchone():
+                    raise tornado.web.HTTPError(409, reason="A loan with recorded payments cannot be reconfigured.")
         # Save funding position if loan_id provided
         if loan_id:
             with get_connection() as conn:
@@ -428,6 +483,18 @@ class RepaymentHandler(BaseHandler):
         policy = data.get("allocationPolicy", "pro-rata")
         positions = data.get("positions", [])
         
+        if loan_id:
+            with get_connection() as conn:
+                if not conn.execute("SELECT id FROM loans WHERE id = ?", (loan_id,)).fetchone():
+                    raise tornado.web.HTTPError(404, reason="Loan not found.")
+                if conn.execute("SELECT id FROM payments WHERE loan_id = ? LIMIT 1", (loan_id,)).fetchone():
+                    raise tornado.web.HTTPError(409, reason="A loan with recorded payments cannot be reconfigured.")
+        if not np.isfinite(principal) or principal <= 0 or not np.isfinite(annual_rate) or not 0 <= annual_rate <= 100 or not 1 <= term <= 600:
+            raise tornado.web.HTTPError(400, reason="Invalid principal, annual rate or term.")
+        if schedule_type not in ("monthly", "bi-monthly", "flexible") or policy not in ("pro-rata", "largest-first", "earliest-first"):
+            raise tornado.web.HTTPError(400, reason="Invalid schedule type or allocation policy.")
+        if positions and round(sum(p["committed_amount"] for p in positions), 2) != round(principal, 2):
+            raise tornado.web.HTTPError(400, reason="Lender commitments must equal the schedule principal.")
         schedule = RepaymentService.generate_schedule(
             principal=principal,
             annual_rate_pct=annual_rate,
@@ -480,57 +547,25 @@ class RecordPaymentHandler(BaseHandler):
             with get_connection() as conn:
                 cursor = conn.cursor()
                 sched_row = cursor.execute("""
-                SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC LIMIT 1;
+                SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC, id DESC LIMIT 1;
                 """, (loan_id,)).fetchone()
                 
-                # Resilient fallback: If no schedule exists yet, auto-generate the baseline plan
                 if not sched_row:
-                    loan_row = cursor.execute("SELECT * FROM loans WHERE id = ?;", (loan_id,)).fetchone()
-                    if not loan_row:
-                        self.write_json({"error": f"Loan {loan_id} not found"}, status=404)
-                        return
-                    
-                    # Fetch funding positions if any
-                    fund_row = cursor.execute("SELECT * FROM funding_positions WHERE loan_id = ? ORDER BY funded_at DESC LIMIT 1;", (loan_id,)).fetchone()
-                    positions = json.loads(fund_row["positions_json"]) if fund_row else None
-                    
-                    gen_schedule = RepaymentService.generate_schedule(
-                        principal=float(loan_row["loan_amount"]),
-                        annual_rate_pct=float(loan_row["interest_rate"]),
-                        term_months=int(loan_row["loan_term"]),
-                        schedule_type="monthly",
-                        allocation_policy="pro-rata",
-                        lender_positions=positions
-                    )
-                    cursor.execute("""
-                    INSERT INTO repayment_schedules (
-                        loan_id, schedule_type, allocation_policy, principal,
-                        annual_rate, term_months, indicative_emi, total_interest,
-                        total_repayable, installments_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                    """, (
-                        loan_id,
-                        gen_schedule["schedule_type"],
-                        gen_schedule["allocation_policy"],
-                        gen_schedule["original_principal"],
-                        gen_schedule["annual_interest_rate"],
-                        gen_schedule["term_months"],
-                        gen_schedule["indicative_emi"],
-                        gen_schedule["total_interest"],
-                        gen_schedule["total_repayable"],
-                        json.dumps(gen_schedule["installments"])
-                    ))
-                    conn.commit()
-                    sched_row = cursor.execute("""
-                    SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC LIMIT 1;
-                    """, (loan_id,)).fetchone()
-                    
+                    self.write_json({"error": "Generate and review a repayment schedule before recording payment."}, status=409)
+                    return
+
                 installments = json.loads(sched_row["installments_json"])
                 target = next((inst for inst in installments if inst.get("installment_num") == inst_num), None)
                 if not target:
                     self.write_json({"error": f"Installment #{inst_num} not found in schedule"}, status=404)
                     return
                     
+                if target.get("status") == "PAID":
+                    self.write_json({"error": "Installment already paid."}, status=409)
+                    return
+                if not np.isfinite(amount) or amount <= 0 or round(amount, 2) != round(target["payment_amount"], 2):
+                    self.write_json({"error": "Enter the exact positive installment amount. Partial payments are not supported by this endpoint."}, status=400)
+                    return
                 target["status"] = "PAID"
                 target["paid_at"] = datetime.datetime.now().isoformat()
                 target["actual_amount_paid"] = amount or target.get("payment_amount", 0.0)
@@ -592,6 +627,9 @@ class PortfolioExposureHandler(BaseHandler):
             band_rows = cursor.execute("""
             SELECT r.risk_level, COUNT(*) as count, AVG(r.risk_score) as avg_score, AVG(r.probability_of_default) as avg_pd
             FROM risk_assessments r
+            WHERE r.id = (SELECT latest.id FROM risk_assessments latest
+                WHERE latest.loan_id = r.loan_id
+                ORDER BY latest.assessed_at DESC, latest.id DESC LIMIT 1)
             GROUP BY r.risk_level;
             """).fetchall()
             
@@ -633,12 +671,9 @@ class DatasetExplorerHandler(BaseHandler):
     @classmethod
     def get_df(cls):
         if cls._df is None:
-            csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "loan_default_full.csv")
-            if os.path.exists(csv_path):
-                cls._df = pd.read_csv(csv_path)
-            else:
-                sample_path = os.path.join(os.path.dirname(__file__), "..", "data", "sample_loan_default.csv")
-                cls._df = pd.read_csv(sample_path)
+            if not DATA_PATH.is_file():
+                raise tornado.web.HTTPError(503, reason="Benchmark dataset is unavailable.")
+            cls._df = pd.read_csv(DATA_PATH)
         return cls._df
 
     def get(self):
@@ -646,22 +681,25 @@ class DatasetExplorerHandler(BaseHandler):
         search = self.get_argument("search", "").strip().lower()
         risk_filter = self.get_argument("risk", "all").strip().capitalize()
         sort_by = self.get_argument("sort", "score")
-        page = max(1, int(self.get_argument("page", 1)))
-        limit = max(10, min(100, int(self.get_argument("limit", 25))))
+        try:
+            page = max(1, int(self.get_argument("page", 1)))
+            limit = max(10, min(100, int(self.get_argument("limit", 25))))
+        except ValueError:
+            raise tornado.web.HTTPError(400, reason="page and limit must be integers.")
         
         filtered = df.copy()
         
         # Search by LoanID or Purpose or Education
         if search:
             mask = (
-                filtered["LoanID"].astype(str).str.lower().str.contains(search) |
-                filtered["Income"].astype(str).str.contains(search) |
-                filtered["CreditScore"].astype(str).str.contains(search)
+                filtered["LoanID"].astype(str).str.lower().str.contains(search, regex=False) |
+                filtered["Income"].astype(str).str.contains(search, regex=False) |
+                filtered["CreditScore"].astype(str).str.contains(search, regex=False)
             )
             filtered = filtered[mask]
             
         # Target isolation check: Default is historical validation, not feature
-        if "Default" in filtered.columns:
+        if "Default" in filtered.columns and not filtered.empty:
             historical_default_rate = round(float(filtered["Default"].mean() * 100), 2)
         else:
             historical_default_rate = 0.0
@@ -673,10 +711,10 @@ class DatasetExplorerHandler(BaseHandler):
             )),
             0.01, 0.95
         )
-        filtered["Score"] = np.round(np.where(
+        filtered["Score"] = np.clip(np.round(np.where(
             filtered["EstPD"] < 0.08, (filtered["EstPD"] / 0.08) * 30,
             np.where(filtered["EstPD"] < 0.20, 30 + ((filtered["EstPD"] - 0.08) / 0.12) * 30, 60 + ((filtered["EstPD"] - 0.20) / 0.40) * 39)
-        )).astype(int)
+        )), 0, 99).astype(int)
         
         filtered["RiskLevel"] = np.where(
             filtered["EstPD"] >= 0.20, "High",
@@ -740,7 +778,7 @@ class DatasetExplorerHandler(BaseHandler):
 # 12. Model Metrics & Live Performance Handler
 class ModelMetricsHandler(BaseHandler):
     def get(self):
-        metrics_path = os.path.join(os.path.dirname(__file__), "..", "ml", "artifacts", "model_metrics.json")
+        metrics_path = ARTIFACTS_DIR / "model_metrics.json"
         if os.path.exists(metrics_path):
             with open(metrics_path, "r") as f:
                 data = json.load(f)
@@ -749,8 +787,30 @@ class ModelMetricsHandler(BaseHandler):
             self.write_json({"error": "Model metrics not generated. Please run ml/train.py."}, status=404)
 
 # 13. Application Factory & Server Startup
+class PublicFileHandler(tornado.web.StaticFileHandler):
+    """Allow only frontend entry files and the bundled public asset directory."""
+    def set_extra_headers(self, path):
+        self.set_header("Cache-Control", "no-cache")
+
+    async def get(self, path, include_body=True):
+        await super().get(path or "index.html", include_body=include_body)
+
+    def validate_absolute_path(self, root, absolute_path):
+        from pathlib import Path
+        resolved = Path(absolute_path).resolve()
+        try:
+            relative = resolved.relative_to(PROJECT_ROOT)
+        except ValueError:
+            raise tornado.web.HTTPError(404)
+        public_files = {"index.html", "app.js", "styles.css"}
+        if relative.as_posix() not in public_files:
+            if len(relative.parts) != 2 or relative.parts[0] != "assets" or relative.suffix.lower() not in {".png", ".mp4"}:
+                raise tornado.web.HTTPError(404)
+        return super().validate_absolute_path(root, absolute_path)
+
+
 def make_app():
-    static_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    static_path = str(PROJECT_ROOT)
     
     return tornado.web.Application([
         # REST API Routes
@@ -768,25 +828,27 @@ def make_app():
         (r"/api/model/metrics", ModelMetricsHandler),
         
         # Static Workstation Assets & Fallback
-        (r"/(.*)", tornado.web.StaticFileHandler, {
+        (r"/(.*)", PublicFileHandler, {
             "path": static_path,
             "default_filename": "index.html"
         }),
     ], debug=False)
 
-def run_server(port=8000):
-    init_db()
-    seed_default_cases()
+def run_server(port=PORT):
+    if not 1 <= port <= 65535:
+        raise ValueError("Port must be between 1 and 65535.")
     # Pre-load ML engine
     RiskInferenceEngine.get_instance()
+    init_db()
+    seed_default_cases()
     
     app = make_app()
     bound = False
     original_port = port
     
-    for p in range(port, port + 10):
+    for p in range(port, min(port + 10, 65536)):
         try:
-            app.listen(p)
+            app.listen(p, address=HOST)
             port = p
             bound = True
             break

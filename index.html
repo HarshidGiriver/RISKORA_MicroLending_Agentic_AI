@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RISKORA | AI/ML Micro-Lending Risk Platform</title>
 <meta name="description" content="RISKORA — AI-assisted risk-based framework and decision-support workstation for digital micro-lending.">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=workflow-3">
 </head>
 <body>
 <div id="accessGate" class="access-gate">
@@ -13,7 +13,7 @@
   <div class="access-shell">
     <img class="access-logo" src="assets/riskora-logo-dark.png" alt="RISKORA">
     <div class="access-rule"></div>
-    <div class="eyebrow">INSTITUTIONAL RISK WORKSTATION · PRODUCTION ENGINE</div>
+    <div class="eyebrow">RISK WORKSTATION · LOCAL DEMONSTRATION</div>
     <h1>From loan request<br><span>to defensible decision.</span></h1>
     <p class="access-copy">RISKORA connects calibrated machine-learning risk prediction, data quality scanning, anomaly detection, syndicated funding optimisation, and waterfall repayment into one unified decision trail.</p>
     <form id="accessForm">
@@ -22,7 +22,7 @@
         <input id="reviewerName" required autocomplete="name" placeholder="Enter your name (e.g. Dr. Reviewer)">
         <button type="submit">ENTER WORKSPACE <span>→</span></button>
       </div>
-      <small>AUTHENTICATED WORKSTATION SESSION · RISKORA-ML-V1.0 CONNECTED</small>
+      <small>REVIEWER LABEL ONLY · AUTHENTICATION NOT ENABLED · RISKORA-ML-V1.0 CONNECTED</small>
     </form>
   </div>
   <div class="access-footer">RISKORA <span>•</span> AI-ASSISTED RISK PLATFORM FOR DIGITAL MICRO-LENDING</div>
@@ -75,7 +75,7 @@
     <div class="topbar-chip" id="topActiveCase"><span class="topbar-chip-label">ACTIVE CASE:</span> <b id="topCaseId">LR-1054</b></div>
     <span class="system-status"><i></i>ML Engine Online</span>
     <span class="system-status audit-badge"><i></i>Ledger Synced</span>
-    <button class="btn dark" id="runDemo">Run full case demo</button>
+    <button class="btn dark" id="runDemo">Assess & view report</button>
   </div>
 </header>
 
@@ -226,14 +226,14 @@
   </div>
 
   <!-- Multi-Column Intelligence Grid: Explainability, Data Quality, Anomaly Scan -->
-  <div class="intelligence-grid" style="grid-template-columns: 1.2fr 0.8fr;">
+  <div class="intelligence-grid">
     <div class="panel">
       <div class="panel-head">
         <div>
           <div class="eyebrow">LOCAL EXPLAINABILITY</div>
-          <h2>Primary risk drivers (Feature attribution)</h2>
+          <h2>Policy rule indicators</h2>
         </div>
-        <span class="status-chip">STATISTICAL WEIGHTS</span>
+        <span class="status-chip">POLICY POINTS</span>
       </div>
       <div id="riskDrivers"></div>
       <div style="margin-top:18px;">
@@ -300,21 +300,21 @@
           <span>Hypothetical Requested Amount</span>
           <b id="scenarioAmount">₹1,20,000</b>
         </div>
-        <input id="scenarioSlider" type="range" min="25000" max="400000" step="5000" value="120000">
+        <input id="scenarioSlider" type="range" min="1" max="10000000" step="any" value="120000">
       </div>
       <div>
         <div class="scenario-value">
           <span>Hypothetical Credit Score</span>
           <b id="scenarioCreditVal">650</b>
         </div>
-        <input id="scenarioCreditSlider" type="range" min="400" max="850" step="10" value="650">
+        <input id="scenarioCreditSlider" type="range" min="300" max="850" step="1" value="650">
       </div>
       <div>
         <div class="scenario-value">
           <span>Hypothetical DTI Ratio</span>
           <b id="scenarioDtiVal">0.32</b>
         </div>
-        <input id="scenarioDtiSlider" type="range" min="0.10" max="0.75" step="0.02" value="0.32">
+        <input id="scenarioDtiSlider" type="range" min="0" max="1" step="any" value="0.32">
       </div>
       <div style="display:flex; align-items:flex-end;">
         <button class="btn full" id="resetScenario">Reset Scenario</button>
@@ -564,8 +564,8 @@
   <div class="page-head">
     <div>
       <div class="eyebrow">08 · DATASET EXPLORER & INGESTION</div>
-      <h1>Benchmark loan default data.</h1>
-      <p>Inspect, filter, search, and validate the 12,000-sample micro-lending benchmark dataset.</p>
+      <h1>Synthetic loan default dataset.</h1>
+      <p>Inspect, filter, search, and validate the 12,000-sample synthetic dataset. Explorer scores are heuristic estimates, not trained-model predictions.</p>
     </div>
     <div class="hero-actions">
       <button class="btn dark" id="loadBundled">Reload Benchmark Data</button>
@@ -578,7 +578,7 @@
     <div><span>Avg Credit Score</span><strong id="dsAvgCredit">645.2</strong></div>
     <div><span>Avg Loan Amount</span><strong id="dsAvgLoan">₹1,24,500</strong></div>
     <div><span>Target Isolated</span><strong style="color:var(--green)">Leakage Free</strong></div>
-    <div><span>ML Model</span><strong>HistGBM v1.0</strong></div>
+    <div><span>Explorer scoring</span><strong>Heuristic estimate</strong></div>
   </div>
 
   <div class="table-panel panel">
@@ -784,6 +784,6 @@
 </main>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=workflow-3"></script>
 </body>
 </html>

@@ -78,3 +78,16 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .topbar-chip-label{font:700 8px ui-monospace,monospace;color:#64748b;letter-spacing:.08em}
 .audit-badge i{background:#3b82f6!important}
 
+
+/* Keep all workflow pages reachable on small screens. */
+.main,.page,.panel,.table-scroll{min-width:0}
+@media(min-width:721px){.case-table-row{grid-template-columns:1.5fr .7fr .7fr .75fr .9fr 1fr auto}}
+@media(max-width:720px){
+.nav-group{display:flex;flex-wrap:wrap;gap:4px}.nav{flex:1 1 140px}.nav-group>span{width:100%}
+.topbar{height:auto;min-height:64px;flex-wrap:wrap;gap:10px;padding:12px 16px}
+.top-right{flex-wrap:wrap}.toolbar,.table-toolbar{flex-wrap:wrap}.segmented{flex-wrap:wrap}
+.scenario-controls,.scenario-results,.report-grid,.intelligence-grid{grid-template-columns:1fr}
+.decision-head{flex-wrap:wrap}.panel{padding:16px}.page{max-width:100%;overflow-wrap:anywhere}
+.term-grid input,.term-grid select{max-width:100%;min-width:0}.search{min-width:0}
+}
+:focus-visible{outline:3px solid #3b82f6;outline-offset:3px}

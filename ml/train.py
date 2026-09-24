@@ -10,6 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 import joblib
+from backend.config import DATA_PATH, ARTIFACTS_DIR
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -37,8 +38,8 @@ def add_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
 def run_training_pipeline():
     start_time = time.time()
     base_dir = os.path.dirname(__file__)
-    data_path = os.path.join(base_dir, "..", "data", "loan_default_full.csv")
-    artifacts_dir = os.path.join(base_dir, "artifacts")
+    data_path = DATA_PATH
+    artifacts_dir = ARTIFACTS_DIR
     os.makedirs(artifacts_dir, exist_ok=True)
     
     print(f"[1/7] Loading dataset from {data_path}...")

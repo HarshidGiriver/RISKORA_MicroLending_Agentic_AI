@@ -14,8 +14,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.server import make_app
 from backend.database import init_db, seed_default_cases
 from ml.infer import RiskInferenceEngine
+from tests.support import IsolatedDatabaseMixin
 
-class TestRiskoraAPI(tornado.testing.AsyncHTTPTestCase):
+class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(cls):
         # Pre-load ML engine once to prevent first-call timeout
@@ -153,10 +154,9 @@ class TestRiskoraAPI(tornado.testing.AsyncHTTPTestCase):
             "installmentNum": 1
         }
         response = self.fetch("/api/repayment/record", method="POST", body=json.dumps(pay_payload))
-        self.assertEqual(response.code, 200)
+        self.assertEqual(response.code, 409)
         data = json.loads(response.body)
-        self.assertTrue(data["success"])
-        self.assertEqual(data["payment"]["status"], "PAID")
+        self.assertIn("schedule", data["error"])
 
 if __name__ == "__main__":
     tornado.testing.main()

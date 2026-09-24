@@ -9,25 +9,45 @@ import json
 import numpy as np
 import pandas as pd
 import joblib
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
+from backend.config import ARTIFACTS_DIR
+from backend.schema import inference_profile
+from ml.artifact_validation import validate_artifact_files
 from typing import Dict, Any, List, Tuple
 
 class RiskInferenceEngine:
     _instance = None
     
     def __init__(self):
-        base_dir = os.path.dirname(__file__)
-        artifacts_dir = os.path.join(base_dir, "artifacts")
-        model_path = os.path.join(artifacts_dir, "riskora_model.joblib")
-        preprocessor_path = os.path.join(artifacts_dir, "preprocessor.joblib")
-        metrics_path = os.path.join(artifacts_dir, "model_metrics.json")
-        
-        if not os.path.exists(model_path) or not os.path.exists(preprocessor_path):
-            raise FileNotFoundError("Model artifacts not found. Please run ml/train.py first.")
-            
-        self.model = joblib.load(model_path)
-        self.preprocessor = joblib.load(preprocessor_path)
-        with open(metrics_path, "r") as f:
-            self.metadata = json.load(f)
+        model_path, preprocessor_path, metrics_path = validate_artifact_files(ARTIFACTS_DIR)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", InconsistentVersionWarning)
+                self.model = joblib.load(model_path)
+                self.preprocessor = joblib.load(preprocessor_path)
+            with open(metrics_path, "r", encoding="utf-8") as f:
+                self.metadata = json.load(f)
+            if not isinstance(self.metadata, dict):
+                raise ValueError("Metrics metadata must be an object.")
+            policy = self.metadata["threshold_policy"]
+            if not 0 < policy["low_risk_threshold"] < policy["high_risk_threshold"] < 0.60:
+                raise ValueError("Invalid risk thresholds in metrics metadata.")
+            if not self.metadata["model_metadata"]["model_version"]:
+                raise ValueError("Missing model version.")
+            probe = self.preprocessor.transform(self._normalize_input({}))
+            if probe.shape[1] != self.metadata["model_metadata"]["feature_count"]:
+                raise ValueError("Preprocessor and metadata feature counts differ.")
+            probabilities = self.model.predict_proba(probe)
+            if list(self.model.classes_) != [0, 1] or probabilities.shape != (1, 2):
+                raise ValueError("Artifact must predict binary classes 0 and 1.")
+            if not np.isfinite(probabilities).all() or not np.all((probabilities >= 0) & (probabilities <= 1)) or not np.allclose(probabilities.sum(axis=1), 1):
+                raise ValueError("Artifact produced invalid probabilities.")
+        except Exception as error:
+            raise RuntimeError(
+                "Model artifacts could not be validated. Install requirements.txt and "
+                "restore a matching model, preprocessor, and metrics set. " + str(error)
+            ) from error
             
         self.feature_ref = self.metadata.get("feature_reference", {})
         self.numeric_means = self.feature_ref.get("numeric_means", {})
@@ -45,62 +65,11 @@ class RiskInferenceEngine:
 
     def _normalize_input(self, raw: Dict[str, Any]) -> pd.DataFrame:
         """Maps varying client/API input naming conventions into standard training schema."""
-        def get_val(*keys, default=None):
-            for k in keys:
-                if k in raw and raw[k] is not None and str(raw[k]).strip() != "":
-                    return raw[k]
-            return default
-
-        age = float(get_val("Age", "age", default=35))
-        income = float(get_val("Income", "income", "annualIncome", default=450000))
-        loan_amount = float(get_val("LoanAmount", "loanAmount", "amount", default=120000))
-        credit_score = float(get_val("CreditScore", "creditScore", "credit", default=650))
-        months_employed = float(get_val("MonthsEmployed", "monthsEmployed", "empMonths", default=36))
-        num_credit_lines = float(get_val("NumCreditLines", "numCreditLines", "creditLines", default=4))
-        interest_rate = float(get_val("InterestRate", "interestRate", "rate", default=12.5))
-        loan_term = int(get_val("LoanTerm", "loanTerm", "term", default=36))
-        dti_ratio = float(get_val("DTIRatio", "dtiRatio", "dti", default=0.32))
-        
-        education = str(get_val("Education", "education", default="Bachelor's"))
-        emp_type = str(get_val("EmploymentType", "employmentType", "employment", default="Salaried"))
-        marital_status = str(get_val("MaritalStatus", "maritalStatus", default="Married"))
-        has_mortgage = str(get_val("HasMortgage", "hasMortgage", default="No"))
-        has_dependents = str(get_val("HasDependents", "hasDependents", default="No"))
-        loan_purpose = str(get_val("LoanPurpose", "loanPurpose", "purpose", default="Business"))
-        has_cosigner = str(get_val("HasCoSigner", "hasCoSigner", "hasCosigner", default="No"))
-        
-        # Standardize categorical Yes/No
-        has_mortgage = "Yes" if str(has_mortgage).lower() in ["yes", "true", "1"] else "No"
-        has_dependents = "Yes" if str(has_dependents).lower() in ["yes", "true", "1"] else "No"
-        has_cosigner = "Yes" if str(has_cosigner).lower() in ["yes", "true", "1"] else "No"
-        
-        # Feature engineering
-        loan_to_income = round(loan_amount / max(income, 1.0), 4)
-        monthly_inc = max(income / 12.0, 1.0)
-        monthly_principal = loan_amount / max(loan_term, 1)
-        monthly_burden = round(monthly_principal / monthly_inc, 4)
-        
-        row_dict = {
-            "Age": [age],
-            "Income": [income],
-            "LoanAmount": [loan_amount],
-            "CreditScore": [credit_score],
-            "MonthsEmployed": [months_employed],
-            "NumCreditLines": [num_credit_lines],
-            "InterestRate": [interest_rate],
-            "LoanTerm": [loan_term],
-            "DTIRatio": [dti_ratio],
-            "Education": [education],
-            "EmploymentType": [emp_type],
-            "MaritalStatus": [marital_status],
-            "HasMortgage": [has_mortgage],
-            "HasDependents": [has_dependents],
-            "LoanPurpose": [loan_purpose],
-            "HasCoSigner": [has_cosigner],
-            "LoanToIncome": [loan_to_income],
-            "MonthlyBurdenRatio": [monthly_burden]
-        }
-        return pd.DataFrame(row_dict)
+        row = inference_profile(raw)
+        row["LoanToIncome"] = round(row["LoanAmount"] / max(row["Income"], 1.0), 4)
+        monthly_income = max(row["Income"] / 12.0, 1.0)
+        row["MonthlyBurdenRatio"] = round((row["LoanAmount"] / row["LoanTerm"]) / monthly_income, 4)
+        return pd.DataFrame([row])
 
     def explain_instance(self, input_df: pd.DataFrame, pd_score: float) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
@@ -109,7 +78,9 @@ class RiskInferenceEngine:
         """
         drivers = []
         protective = []
-        row = input_df.iloc[0]
+        # Explanations are API/SQLite JSON values, not NumPy scalar objects.
+        row = {key: value.item() if isinstance(value, np.generic) else value
+               for key, value in input_df.iloc[0].items()}
         
         # 1. Credit Score Impact
         cs = row["CreditScore"]

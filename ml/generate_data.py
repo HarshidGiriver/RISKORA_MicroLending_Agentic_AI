@@ -8,6 +8,7 @@ non-linear risk interactions, and empirical default patterns.
 import os
 import numpy as np
 import pandas as pd
+from backend.config import DATA_PATH
 
 def generate_benchmark_dataset(num_samples: int = 12000, seed: int = 42) -> pd.DataFrame:
     np.random.seed(seed)
@@ -134,9 +135,9 @@ def generate_benchmark_dataset(num_samples: int = 12000, seed: int = 42) -> pd.D
     return df
 
 if __name__ == "__main__":
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    out_dir = str(DATA_PATH.parent)
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, "loan_default_full.csv")
+    out_path = DATA_PATH
     
     df = generate_benchmark_dataset(12000, seed=42)
     df.to_csv(out_path, index=False)

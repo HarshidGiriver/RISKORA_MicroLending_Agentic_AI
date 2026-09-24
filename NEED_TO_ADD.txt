@@ -1,1 +1,0 @@
-need to add :proper login  ,database, ai integration

@@ -1,0 +1,13 @@
+# Runtime and transitive dependencies, verified on CPython 3.14.
+# Match scikit-learn to the supplied serialized model artifacts.
+numpy==2.5.2
+pandas==3.0.5
+scipy==1.18.0
+scikit-learn==1.9.1
+joblib==1.5.3
+threadpoolctl==3.6.0
+narwhals==2.26.0
+tornado==6.5.10
+python-dateutil==2.9.0.post0
+six==1.17.0
+tzdata==2026.3
