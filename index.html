@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RISKORA | AI/ML Micro-Lending Risk Platform</title>
+<meta name="description" content="RISKORA — AI-assisted risk-based framework and decision-support workstation for digital micro-lending.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="accessGate" class="access-gate">
+  <div class="access-grid"></div>
+  <div class="access-shell">
+    <img class="access-logo" src="assets/riskora-logo-dark.png" alt="RISKORA">
+    <div class="access-rule"></div>
+    <div class="eyebrow">INSTITUTIONAL RISK WORKSTATION · PRODUCTION ENGINE</div>
+    <h1>From loan request<br><span>to defensible decision.</span></h1>
+    <p class="access-copy">RISKORA connects calibrated machine-learning risk prediction, data quality scanning, anomaly detection, syndicated funding optimisation, and waterfall repayment into one unified decision trail.</p>
+    <form id="accessForm">
+      <label for="reviewerName">UNDERWRITER / REVIEWER NAME</label>
+      <div class="access-input-row">
+        <input id="reviewerName" required autocomplete="name" placeholder="Enter your name (e.g. Dr. Reviewer)">
+        <button type="submit">ENTER WORKSPACE <span>→</span></button>
+      </div>
+      <small>AUTHENTICATED WORKSTATION SESSION · RISKORA-ML-V1.0 CONNECTED</small>
+    </form>
+  </div>
+  <div class="access-footer">RISKORA <span>•</span> AI-ASSISTED RISK PLATFORM FOR DIGITAL MICRO-LENDING</div>
+</div>
+
+<div id="introGate" class="intro-gate" aria-hidden="true">
+  <video id="logoReveal" playsinline preload="auto">
+    <source src="assets/riskora-logo-reveal.mp4" type="video/mp4">
+  </video>
+  <div class="intro-fallback">RISKORA</div>
+</div>
+
+<div class="shell" id="appShell" aria-hidden="true">
+<aside class="sidebar">
+  <a class="brand" href="#" data-page="overview">
+    <img src="assets/riskora-mark-white.png" alt="RISKORA">
+    <span><b>RISKORA</b><small>MICRO-LENDING RISK PLATFORM</small></span>
+  </a>
+  <div class="workspace">
+    <span class="live-dot"></span>
+    <span id="reviewerLabel">REVIEWER · LIVE SESSION</span>
+  </div>
+  <nav class="nav-group">
+    <div class="nav-label">DECISION WORKFLOW</div>
+    <button class="nav active" data-page="overview"><span>01</span> Command Center</button>
+    <button class="nav" data-page="cases"><span>02</span> Loan Request Queue</button>
+    <button class="nav" data-page="intelligence"><span>03</span> Risk Intelligence</button>
+    <button class="nav" data-page="funding"><span>04</span> Funding Optimizer</button>
+    <button class="nav" data-page="repayment"><span>05</span> Repayment Engine</button>
+    <button class="nav" data-page="exposure"><span>06</span> Exposure Monitor</button>
+    <button class="nav" data-page="decision"><span>07</span> Decision Report</button>
+  </nav>
+  <nav class="nav-group">
+    <div class="nav-label">ANALYTICS & VALIDATION</div>
+    <button class="nav" data-page="explorer"><span>08</span> Dataset Explorer</button>
+    <button class="nav" data-page="validation"><span>09</span> Model Validation</button>
+    <button class="nav" data-page="manual"><span>10</span> What-If Sandbox</button>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="engine-label">ACTIVE ML ENGINE</div>
+    <strong>HistGradientBoosting v1.0</strong>
+    <span>Calibrated Platt Scaling · ROC 0.792</span>
+  </div>
+</aside>
+
+<main class="main">
+<header class="topbar">
+  <div class="crumb">RISKORA / <span id="pageTitle">Command Center</span></div>
+  <div class="top-right">
+    <div class="topbar-chip" id="topActiveCase"><span class="topbar-chip-label">ACTIVE CASE:</span> <b id="topCaseId">LR-1054</b></div>
+    <span class="system-status"><i></i>ML Engine Online</span>
+    <span class="system-status audit-badge"><i></i>Ledger Synced</span>
+    <button class="btn dark" id="runDemo">Run full case demo</button>
+  </div>
+</header>
+
+<!-- PAGE 1: COMMAND CENTER -->
+<section id="overview" class="page active">
+  <div class="hero-head">
+    <div>
+      <div class="eyebrow">RISK REVIEW DESK · COMMAND CENTER</div>
+      <h1>One case. One intelligence trail. One decision.</h1>
+      <p>RISKORA turns raw borrower characteristics into calibrated risk probabilities, feature explainability, syndicated funding, and auditable repayment plans.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn dark" data-action="open-case">Open active case</button>
+      <button class="btn" data-action="reset-case">Reset case</button>
+    </div>
+  </div>
+  
+  <div class="case-banner">
+    <div>
+      <span class="eyebrow">ACTIVE EVALUATION CASE</span>
+      <strong id="heroCaseId">LR-1054</strong>
+      <span id="heroCaseName">Rahul P · ₹1,20,000 request</span>
+    </div>
+    <div class="case-stage">
+      <span>CASE STAGE</span>
+      <b id="heroStage">REQUEST RECEIVED</b>
+    </div>
+    <div class="case-cta">
+      <button class="btn dark" data-action="continue-case">Continue review →</button>
+    </div>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric">
+      <span>Calibrated Risk Score</span>
+      <strong id="mScore">—</strong>
+      <small id="mRisk">Awaiting ML analysis</small>
+    </div>
+    <div class="metric">
+      <span>Probability of Default</span>
+      <strong id="mPd">—</strong>
+      <small id="mPdLabel">Statistical default hazard</small>
+    </div>
+    <div class="metric">
+      <span>Syndication Structure</span>
+      <strong id="mFunding">Pending</strong>
+      <small>Single vs. Fractional</small>
+    </div>
+    <div class="metric">
+      <span>Recommendation</span>
+      <strong id="mDecision">Pending</strong>
+      <small>Underwriting disposition</small>
+    </div>
+  </div>
+
+  <div class="overview-grid">
+    <div class="panel journey-panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">CONNECTED WORKFLOW</div>
+          <h2>RISKORA end-to-end case journey</h2>
+        </div>
+        <span class="progress-label" id="journeyProgress">0 / 7 stages</span>
+      </div>
+      <div class="journey" id="journey"></div>
+    </div>
+    <div class="panel intelligence-card">
+      <div class="eyebrow">INTELLIGENCE BRIEF</div>
+      <div class="ai-orbit">
+        <div class="orbit-core">R</div>
+        <i></i><i></i><i></i><i></i>
+      </div>
+      <h2 id="briefTitle">Case awaiting ML investigation</h2>
+      <p id="briefText">Initiate analysis to let RISKORA evaluate default hazard, verify data quality, scan anomalies, and structure exposure.</p>
+      <button class="btn dark" data-action="analyze" style="margin-top:12px;">Run RISKORA analysis →</button>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">QUEUE SNAPSHOT</div>
+      <h2>Priority micro-loan requests</h2>
+    </div>
+    <button class="text-btn" data-page="cases">View all requests →</button>
+  </div>
+  <div class="case-cards" id="overviewCases"></div>
+</section>
+
+<!-- PAGE 2: CASE QUEUE -->
+<section id="cases" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">CASE QUEUE · UNDERWRITING INBOX</div>
+      <h1>Loan requests</h1>
+      <p>Select any loan request to evaluate through the calibrated ML model and funding pipeline.</p>
+    </div>
+  </div>
+  <div class="toolbar">
+    <div class="search">
+      <span>⌕</span>
+      <input id="caseSearch" placeholder="Search case ID, borrower name, amount or purpose…">
+    </div>
+    <div class="segmented">
+      <button class="filter active" data-filter="all">All</button>
+      <button class="filter" data-filter="high">High risk</button>
+      <button class="filter" data-filter="analyzed">Analyzed</button>
+      <button class="filter" data-filter="incomplete">Requires verification</button>
+    </div>
+  </div>
+  <div class="table-panel panel" id="caseTable"></div>
+</section>
+
+<!-- PAGE 3: RISK INTELLIGENCE -->
+<section id="intelligence" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">03 · CALIBRATED RISK INTELLIGENCE</div>
+      <h1>Evidence-based risk & explainability.</h1>
+      <p>Calibrated probability of default, local feature attribution, data quality scoring, and anomaly detection.</p>
+    </div>
+    <button class="btn dark" data-action="analyze">Run / Refresh ML Analysis</button>
+  </div>
+
+  <div class="analysis-hero">
+    <div class="risk-gauge">
+      <div class="gauge-ring">
+        <div>
+          <strong id="riskScore">—</strong>
+          <span>/100 SCORE</span>
+        </div>
+      </div>
+      <div style="text-align:center; margin-top:10px;">
+        <span id="riskLevel" class="risk-pill unassessed">NOT ANALYSED</span>
+        <div id="riskPdHero" style="font-size:12px; margin-top:6px; color:#aeb5ba;">PD: Awaiting inference</div>
+      </div>
+    </div>
+    <div class="analysis-summary">
+      <div class="eyebrow">MODEL INTERPRETATION & RECOMMENDATION</div>
+      <h2 id="analysisHeadline">Awaiting machine learning analysis.</h2>
+      <p id="analysisSummary">Run the analysis to transform borrower characteristics into an explainable risk assessment.</p>
+      <div class="signal-row">
+        <div><span>Probability of Default</span><b id="sigPd">—</b></div>
+        <div><span>Debt-to-Income (DTI)</span><b id="sigDti">—</b></div>
+        <div><span>Bureau Credit Score</span><b id="sigCredit">—</b></div>
+        <div><span>Loan / Income Ratio</span><b id="sigCoverage">—</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-Column Intelligence Grid: Explainability, Data Quality, Anomaly Scan -->
+  <div class="intelligence-grid" style="grid-template-columns: 1.2fr 0.8fr;">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">LOCAL EXPLAINABILITY</div>
+          <h2>Primary risk drivers (Feature attribution)</h2>
+        </div>
+        <span class="status-chip">STATISTICAL WEIGHTS</span>
+      </div>
+      <div id="riskDrivers"></div>
+      <div style="margin-top:18px;">
+        <div class="eyebrow">PROTECTIVE FACTORS (RISK MITIGATORS)</div>
+        <div id="riskProtective" style="margin-top:8px;"></div>
+      </div>
+      <div class="ai-note">
+        <b>Explainability & Causality Disclosure</b>
+        <span id="explainabilityText">Feature attributions represent empirical statistical correlations with historical default outcomes. They serve as decision-support signals and should not be construed as absolute causal determinants.</span>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:17px;">
+      <!-- Data Quality Panel -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">DATA INTEGRITY ENGINE</div>
+            <h2>Data quality audit</h2>
+          </div>
+          <span id="dqBadge" class="status-chip">CHECKING</span>
+        </div>
+        <div class="dq-meter-row">
+          <div>
+            <span style="font-size:9px; color:#8a929a;">QUALITY INDEX</span>
+            <strong id="dqScore" style="font-size:28px; display:block;">—</strong>
+          </div>
+          <div style="flex:1; padding-left:15px;">
+            <div class="bar" style="height:8px;"><i id="dqBar" style="width:0%;"></i></div>
+            <small id="dqFieldsCount" style="color:#8a929a; font-size:9px; display:block; margin-top:4px;">Required fields audit</small>
+          </div>
+        </div>
+        <div id="dqWarnings" style="margin-top:12px; font-size:10px; color:#6b747c;"></div>
+      </div>
+
+      <!-- Anomaly / Suspicious Profile Detector -->
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <div class="eyebrow">ANOMALY ENGINE</div>
+            <h2>Profile irregularity scan</h2>
+          </div>
+          <span id="anomalyBadge" class="status-chip">SCAN PENDING</span>
+        </div>
+        <p id="anomalySummaryText" style="font-size:11px; margin-bottom:10px;">Scans for extreme financial outliers, impossible demographics, and contradictory declarations.</p>
+        <div id="anomalyList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario Lab: What-If Stress Testing -->
+  <div class="panel scenario-panel">
+    <div class="panel-head">
+      <div>
+        <div class="eyebrow">SCENARIO LAB · REAL-TIME ML SIMULATION</div>
+        <h2>What changes if hypothetical variables change?</h2>
+        <p>Stress-test the applicant profile against the live ML inference service without altering the saved loan record.</p>
+      </div>
+      <span class="status-chip">WHAT-IF ENGINE</span>
+    </div>
+    <div class="scenario-grid-controls">
+      <div>
+        <div class="scenario-value">
+          <span>Hypothetical Requested Amount</span>
+          <b id="scenarioAmount">₹1,20,000</b>
+        </div>
+        <input id="scenarioSlider" type="range" min="25000" max="400000" step="5000" value="120000">
+      </div>
+      <div>
+        <div class="scenario-value">
+          <span>Hypothetical Credit Score</span>
+          <b id="scenarioCreditVal">650</b>
+        </div>
+        <input id="scenarioCreditSlider" type="range" min="400" max="850" step="10" value="650">
+      </div>
+      <div>
+        <div class="scenario-value">
+          <span>Hypothetical DTI Ratio</span>
+          <b id="scenarioDtiVal">0.32</b>
+        </div>
+        <input id="scenarioDtiSlider" type="range" min="0.10" max="0.75" step="0.02" value="0.32">
+      </div>
+      <div style="display:flex; align-items:flex-end;">
+        <button class="btn full" id="resetScenario">Reset Scenario</button>
+      </div>
+    </div>
+    <div class="scenario-results">
+      <div>
+        <span>Simulated Risk Score</span>
+        <b id="scenarioRisk">—</b>
+        <small id="scenarioDelta">Run analysis first</small>
+      </div>
+      <div>
+        <span>Simulated Default Probability</span>
+        <b id="scenarioPd">—</b>
+        <small id="scenarioPdDelta">—</small>
+      </div>
+      <div>
+        <span>Indicative Monthly EMI</span>
+        <b id="scenarioEmi">—</b>
+        <small>36 mos @ 12.0% APR</small>
+      </div>
+      <div>
+        <span>Recommended Syndication</span>
+        <b id="scenarioFunding">—</b>
+        <small id="scenarioDecision">Decision guidance</small>
+      </div>
+    </div>
+    <div class="simulation-notice">
+      <b>INSTITUTIONAL SIMULATION DISCLAIMER</b>: This tool evaluates hypothetical sensitivity. Simulated outputs do not modify saved regulatory borrower files.
+    </div>
+  </div>
+</section>
+
+<!-- PAGE 4: FUNDING OPTIMIZER -->
+<section id="funding" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">04 · SYNDICATED FUNDING OPTIMIZER</div>
+      <h1>Structure capital exposure.</h1>
+      <p>Optimize lender exposure through Single-Lender or Fractional participation based on borrower risk.</p>
+    </div>
+    <button class="btn dark" data-action="optimize-funding">Re-Optimize Structure</button>
+  </div>
+
+  <div class="funding-notice-strip">
+    <strong>CRITICAL RISK DISTINCTION:</strong>
+    <span>Fractional funding distributes lender concentration risk across participants. It does <b>NOT</b> reduce the borrower's default probability.</span>
+  </div>
+
+  <div class="funding-grid">
+    <div class="panel funding-input">
+      <div class="eyebrow">ACTIVE LOAN REQUEST</div>
+      <div class="big-money" id="fundingAmount">₹1,20,000</div>
+      <p id="fundingRiskText">Run the case analysis first.</p>
+      <div class="control-row">
+        <label>Syndication Model
+          <select id="fundingMode">
+            <option value="auto">RISKORA Algorithmic Recommendation</option>
+            <option value="single">Single-Lender (100% Concentration)</option>
+            <option value="fractional">Fractional Syndication (Multi-Lender)</option>
+          </select>
+        </label>
+        <label>Lender Pool Size
+          <select id="lenderCount">
+            <option value="2">2 Institutional Lenders</option>
+            <option value="3" selected>3 Institutional Lenders</option>
+            <option value="4">4 Institutional Lenders</option>
+            <option value="5">5 Institutional Lenders</option>
+          </select>
+        </label>
+      </div>
+      <button class="btn dark full" data-action="apply-funding">Commit Funding Structure →</button>
+    </div>
+
+    <div class="panel flow-panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">CAPITAL SYNDICATION FLOW</div>
+          <h2>Exposure distribution & lender shares</h2>
+        </div>
+        <span id="fundingBadge" class="status-chip">PENDING</span>
+      </div>
+      <div id="fundingFlow" class="funding-flow"></div>
+      <div class="funding-insights" id="fundingInsights"></div>
+    </div>
+  </div>
+
+  <div class="decision-strip" id="fundingDecisionStrip"></div>
+</section>
+
+<!-- PAGE 5: REPAYMENT ENGINE -->
+<section id="repayment" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">05 · AMORTISATION & WATERFALL REPAYMENT</div>
+      <h1>Cash-flow schedule & waterfall allocation.</h1>
+      <p>Multiple schedule types and institutional repayment allocation policies with penny-balanced accounting.</p>
+    </div>
+    <button class="btn dark" data-action="build-repayment">Generate Amortisation Plan</button>
+  </div>
+
+  <div class="repayment-grid">
+    <div class="panel">
+      <div class="eyebrow">TERMS & SCHEDULE PARAMETERS</div>
+      <div class="term-grid">
+        <label>Principal (₹)
+          <input id="repPrincipal" type="number">
+        </label>
+        <label>Annual Interest %
+          <input id="repRate" type="number" step="0.1" value="12.5">
+        </label>
+        <label>Term (Months)
+          <input id="repTerm" type="number" value="36">
+        </label>
+        <label>First Due Date
+          <input id="repDate" type="date">
+        </label>
+        <label>Schedule Type
+          <select id="repScheduleType">
+            <option value="monthly" selected>Fixed Monthly (e.g. 5th of month)</option>
+            <option value="bi-monthly">Fixed Bi-Monthly (5th and 20th)</option>
+            <option value="flexible">Flexible Window (1st–7th of month)</option>
+          </select>
+        </label>
+        <label>Repayment Allocation Policy
+          <select id="repAllocationPolicy">
+            <option value="pro-rata" selected>Pro-Rata Allocation (Default)</option>
+            <option value="largest-first">Largest Contribution First (LCF Waterfall)</option>
+            <option value="earliest-first">Earliest Funding First (FIFO Waterfall)</option>
+          </select>
+        </label>
+      </div>
+      <div class="payment-preview">
+        <span>Indicative Monthly Installment (EMI)</span>
+        <strong id="emiValue">—</strong>
+        <small id="emiMeta">Generate plan after setting loan parameters.</small>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">LENDER WATERFALL REPAYMENT RECONCILIATION</div>
+      <h2 id="repaymentHeadline">No schedule generated</h2>
+      <p id="repaymentNarrative">Configure terms and policy to calculate principal and interest distribution across lenders.</p>
+      <div id="repaymentAllocation" class="repayment-allocation"></div>
+    </div>
+  </div>
+
+  <div class="panel table-panel">
+    <div class="panel-head" style="padding: 16px 20px 0;">
+      <div>
+        <div class="eyebrow">DETAILED AMORTISATION LEDGER</div>
+        <h2>Payment installments & status</h2>
+      </div>
+      <span class="status-chip" id="scheduleStatus">READY</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Due Date</th>
+            <th>Installment</th>
+            <th>Principal</th>
+            <th>Interest</th>
+            <th>Remaining Principal</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="scheduleBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- PAGE 6: EXPOSURE MONITOR -->
+<section id="exposure" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">06 · LENDER PORTFOLIO EXPOSURE MONITOR</div>
+      <h1>Institutional capital concentration.</h1>
+      <p>Real-time exposure tracking, risk-band distribution, and counterparty concentration analysis.</p>
+    </div>
+    <button class="btn dark" data-action="refresh-exposure">Refresh Exposure</button>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric">
+      <span>Total Evaluated Exposure</span>
+      <strong id="expCommitted">₹0</strong>
+      <small>Active case loan</small>
+    </div>
+    <div class="metric">
+      <span>Outstanding Principal</span>
+      <strong id="expOutstanding">₹0</strong>
+      <small>After repayments</small>
+    </div>
+    <div class="metric">
+      <span>Largest Lender Share</span>
+      <strong id="expLargest">—</strong>
+      <small>Concentration benchmark</small>
+    </div>
+    <div class="metric">
+      <span>Herfindahl Index (HHI)</span>
+      <strong id="expConcentration">—</strong>
+      <small>Concentration grade</small>
+    </div>
+  </div>
+
+  <div class="exposure-layout">
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">LENDER POSITIONS</div>
+          <h2>Active syndicate participation</h2>
+        </div>
+      </div>
+      <div id="exposureRows"></div>
+    </div>
+    <div class="panel">
+      <div class="eyebrow">PORTFOLIO CONCENTRATION ANALYSIS</div>
+      <h2 id="exposureHeadline">Awaiting funding structure</h2>
+      <p id="exposureNarrative">Once syndication is committed, RISKORA evaluates concentration against prudential limits.</p>
+      <div id="exposureMeter"></div>
+    </div>
+  </div>
+</section>
+
+<!-- PAGE 7: DECISION REPORT -->
+<section id="decision" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">07 · COMPREHENSIVE DECISION REPORT</div>
+      <h1>Auditable underwriting dossier.</h1>
+      <p>Complete risk intelligence trail assembled for regulatory compliance and credit committees.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn" data-action="copy-summary">Copy Summary</button>
+      <button class="btn dark" onclick="window.print()">Print / Save PDF Report</button>
+    </div>
+  </div>
+  <div class="decision-sheet" id="decisionSheet"></div>
+</section>
+
+<!-- PAGE 8: DATASET EXPLORER -->
+<section id="explorer" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">08 · DATASET EXPLORER & INGESTION</div>
+      <h1>Benchmark loan default data.</h1>
+      <p>Inspect, filter, search, and validate the 12,000-sample micro-lending benchmark dataset.</p>
+    </div>
+    <div class="hero-actions">
+      <button class="btn dark" id="loadBundled">Reload Benchmark Data</button>
+    </div>
+  </div>
+
+  <div class="dataset-stats" id="datasetStats">
+    <div><span>Records</span><strong id="dsRecords">12,000</strong></div>
+    <div><span>Default Rate</span><strong id="dsDefaultRate">11.08%</strong></div>
+    <div><span>Avg Credit Score</span><strong id="dsAvgCredit">645.2</strong></div>
+    <div><span>Avg Loan Amount</span><strong id="dsAvgLoan">₹1,24,500</strong></div>
+    <div><span>Target Isolated</span><strong style="color:var(--green)">Leakage Free</strong></div>
+    <div><span>ML Model</span><strong>HistGBM v1.0</strong></div>
+  </div>
+
+  <div class="table-panel panel">
+    <div class="table-toolbar" style="padding:15px;">
+      <div class="search">
+        <span>⌕</span>
+        <input id="datasetSearch" placeholder="Search Loan ID, credit score, income…">
+      </div>
+      <select id="datasetRisk">
+        <option value="all">All Risk Bands</option>
+        <option value="High">High Risk</option>
+        <option value="Medium">Medium Risk</option>
+        <option value="Low">Low Risk</option>
+      </select>
+      <select id="datasetSort">
+        <option value="score">Risk Score ↓</option>
+        <option value="loan">Loan Amount ↓</option>
+        <option value="credit">Credit Score ↓</option>
+        <option value="income">Income ↓</option>
+      </select>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Loan ID</th>
+            <th>Income</th>
+            <th>Amount</th>
+            <th>Credit</th>
+            <th>DTI</th>
+            <th>Score</th>
+            <th>Risk Level</th>
+            <th>Est. PD</th>
+            <th>Ground Truth Default</th>
+          </tr>
+        </thead>
+        <tbody id="datasetBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination-bar" id="datasetPagination"></div>
+  </div>
+</section>
+
+<!-- PAGE 9: MODEL VALIDATION -->
+<section id="validation" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">09 · MODEL VALIDATION & EMPIRICAL METRICS</div>
+      <h1>Defensible machine learning metrics.</h1>
+      <p>Held-out test set performance, probability calibration, confusion matrix, and feature importances.</p>
+    </div>
+    <button class="btn dark" id="refreshMetrics">Refresh Model Metrics</button>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric">
+      <span>Test ROC-AUC</span>
+      <strong id="valRoc">0.7919</strong>
+      <small>Held-out test set</small>
+    </div>
+    <div class="metric">
+      <span>PR-AUC (Avg Precision)</span>
+      <strong id="valPr">0.4023</strong>
+      <small>Imbalanced benchmark</small>
+    </div>
+    <div class="metric">
+      <span>Brier Score Loss</span>
+      <strong id="valBrier">0.0821</strong>
+      <small>Probabilistic calibration</small>
+    </div>
+    <div class="metric">
+      <span>Calibration Method</span>
+      <strong style="font-size:18px;">Sigmoid Platt</strong>
+      <small>5-Fold Stratified CV</small>
+    </div>
+  </div>
+
+  <div class="overview-grid" style="margin-top:20px;">
+    <!-- Confusion Matrix -->
+    <div class="panel">
+      <div class="eyebrow">DECISION MATRIX @ 0.20 THRESHOLD</div>
+      <h2>Test set confusion matrix</h2>
+      <p style="font-size:11px; margin-bottom:15px;">Evaluated on 1,800 completely unseen loan records with 199 actual defaults.</p>
+      <div class="confusion-grid">
+        <div class="cm-cell">
+          <span>True Negatives (TN)</span>
+          <strong id="cmTn">1,460</strong>
+          <small>Performing correctly identified</small>
+        </div>
+        <div class="cm-cell cm-warn">
+          <span>False Positives (FP)</span>
+          <strong id="cmFp">141</strong>
+          <small>Performing flagged for review</small>
+        </div>
+        <div class="cm-cell cm-alert">
+          <span>False Negatives (FN)</span>
+          <strong id="cmFn">119</strong>
+          <small>Default missed by cutoff</small>
+        </div>
+        <div class="cm-cell cm-success">
+          <span>True Positives (TP)</span>
+          <strong id="cmTp">80</strong>
+          <small>Defaults correctly caught</small>
+        </div>
+      </div>
+      <div class="ai-note" style="margin-top:15px;">
+        <b>Threshold Policy Justification</b>
+        <span>Cutoff is calibrated at 0.20 PD because an unmitigated default costs the lending institution ~4× more in principal loss than the operational overhead of extra verification on a performing borrower.</span>
+      </div>
+    </div>
+
+    <!-- Risk Band Separation -->
+    <div class="panel">
+      <div class="eyebrow">EMPIRICAL OUTCOMES BY RISK BAND</div>
+      <h2>Empirical default rate separation</h2>
+      <p style="font-size:11px; margin-bottom:15px;">Does RISKORA's classification genuinely separate real outcomes?</p>
+      <div class="band-perf-table">
+        <div class="band-perf-row">
+          <div><b style="color:var(--green)">LOW RISK (Score 0–30)</b><span>960 loans in test set</span></div>
+          <strong style="color:var(--green)">3.75% default rate</strong>
+        </div>
+        <div class="band-perf-row">
+          <div><b style="color:var(--amber)">MEDIUM RISK (Score 31–60)</b><span>619 loans in test set</span></div>
+          <strong style="color:var(--amber)">13.41% default rate</strong>
+        </div>
+        <div class="band-perf-row">
+          <div><b style="color:var(--red)">HIGH RISK (Score 61–100)</b><span>221 loans in test set</span></div>
+          <strong style="color:var(--red)">36.20% default rate</strong>
+        </div>
+      </div>
+      <div class="ai-note" style="margin-top:15px;">
+        <b>Separation Power</b>
+        <span>Observed default rate escalates nearly 10× from Low (3.75%) to High (36.20%), confirming strong discriminatory power without target leakage.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Feature Importance Table -->
+  <div class="panel" style="margin-top:20px;">
+    <div class="eyebrow">GLOBAL ATTRIBUTION</div>
+    <h2>Top model feature weights across dataset</h2>
+    <div id="featureImportanceTable" style="margin-top:12px;"></div>
+  </div>
+</section>
+
+<!-- PAGE 10: WHAT-IF SANDBOX -->
+<section id="manual" class="page">
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">10 · WHAT-IF SANDBOX</div>
+      <h1>Evaluate custom borrower scenario.</h1>
+      <p>Submit arbitrary financial variables to observe the calibrated ML model and data quality engine respond.</p>
+    </div>
+  </div>
+  <div class="manual-grid">
+    <form class="panel" id="manualForm">
+      <div class="eyebrow">CANDIDATE PARAMETERS</div>
+      <div class="term-grid">
+        <label>Annual Income (₹)
+          <input id="mi" type="number" value="380000">
+        </label>
+        <label>Requested Principal (₹)
+          <input id="ml" type="number" value="120000">
+        </label>
+        <label>Bureau Credit Score
+          <input id="mc" type="number" value="610">
+        </label>
+        <label>Debt-to-Income (DTI)
+          <input id="md" type="number" step="0.01" value="0.42">
+        </label>
+        <label>Months Employed
+          <input id="me" type="number" value="18">
+        </label>
+        <label>Active Credit Lines
+          <input id="mcl" type="number" value="6">
+        </label>
+        <label>Employment Type
+          <select id="met">
+            <option value="Salaried">Salaried</option>
+            <option value="Self-employed" selected>Self-employed</option>
+            <option value="Contract">Contract</option>
+            <option value="Unemployed">Unemployed</option>
+          </select>
+        </label>
+        <label>Co-Signer Guarantee
+          <select id="mcs">
+            <option value="No" selected>No Co-Signer</option>
+            <option value="Yes">Yes, Registered Co-Signer</option>
+          </select>
+        </label>
+      </div>
+      <button class="btn dark full" type="submit">Run Sandbox Inference</button>
+    </form>
+    <div class="panel" id="manualResult">
+      <div class="empty">
+        <h2>Sandbox Ready</h2>
+        <p>Submit custom values to execute real-time inference, attribution, and data validation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

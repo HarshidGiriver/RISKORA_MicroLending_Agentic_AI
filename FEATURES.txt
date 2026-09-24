@@ -1,0 +1,151 @@
+RISKORA — FEATURES & WORKING FLOW
+=================================
+
+Purpose
+-------
+RISKORA is an academic prototype for explainable AI-ready financial risk intelligence. The application is designed as one connected lending-review workflow rather than a collection of isolated demo screens.
+
+1. SECURE REVIEW ENTRY
+----------------------
+- Reviewer enters a name on the RISKORA access screen.
+- The name is stored in the browser session and shown in the workspace header.
+- Submitting the form starts the supplied RISKORA logo-reveal video.
+- The logo-reveal video uses the supplied branding and its original audio.
+- When the reveal ends, the main application is unlocked.
+- A safe fallback is shown if the browser cannot play the video.
+- Production authentication is intentionally marked as pending; this is not represented as real authentication.
+
+2. COMMAND CENTER
+------------------
+- Shows one active case as the central object of the demonstration.
+- Shows risk score, requested exposure, funding structure and final decision.
+- Displays a seven-stage case journey.
+- Every completed stage changes the journey state instead of acting as a disconnected page.
+- Provides a full-case demo control that walks through the workflow automatically.
+- Provides a case reset control.
+
+3. CASE QUEUE
+-------------
+- Lists curated loan-review cases with borrower, request amount, credit strength, risk level and profile completeness.
+- Search works across case ID, borrower and amount.
+- Filters support all cases, high-attention cases and incomplete cases.
+- Opening a case resets downstream calculations so results never belong to a different borrower.
+
+4. EXPLAINABLE RISK INTELLIGENCE
+--------------------------------
+- Calculates a deterministic V1.0 risk score from borrower facts.
+- Evaluates loan-to-income pressure, credit strength, debt burden, repayment history, employment stability, existing obligations and information gaps.
+- Produces a 0–100 score and High / Medium / Low classification.
+- Shows the individual score drivers and whether each driver increases or decreases risk.
+- Shows debt burden, credit strength and income coverage signals.
+- Shows explicit review controls and missing verification items.
+- The interface clearly identifies V1.0 as explainable/rule-based and does not falsely claim that a production AI model is already connected.
+
+5. FUNDING OPTIMIZER
+--------------------
+- Uses the active case amount and risk level rather than unrelated sample numbers.
+- Recommends single-lender or fractional funding based on the current case.
+- Allows the reviewer to select automatic recommendation, single lender or fractional lending.
+- Allows 2, 3 or 4 participating lenders.
+- Calculates exact percentage and rupee allocation for each lender.
+- Visualises the borrower-to-lender capital flow.
+- Explains whether concentration is reduced or remains high.
+- Applying the funding decision carries the selected structure into repayment and exposure.
+
+6. REPAYMENT ENGINE
+-------------------
+- Inherits the active case principal.
+- Allows interest rate, term and first due date to be changed.
+- Calculates an actual amortisation schedule using the standard monthly-payment formula.
+- Separates payment into interest and principal.
+- Calculates the remaining balance after every month.
+- Displays the complete schedule for the selected term.
+- Calculates indicative EMI and total repayment.
+- Carries the selected lender allocation into the repayment view.
+- This creates a real financial calculation instead of a static repayment table.
+
+7. EXPOSURE MONITOR
+-------------------
+- Uses the active funding and repayment state.
+- Calculates committed capital per lender.
+- Calculates outstanding principal after the repayment schedule begins.
+- Calculates the largest lender share.
+- Classifies concentration as high, moderate or distributed.
+- Displays lender positions and a concentration meter.
+- Explains the lender-side implication of the chosen structure.
+
+8. DECISION REPORT
+------------------
+- Builds the final recommendation from the completed case state.
+- Includes case ID, borrower, requested amount, risk score, funding structure, repayment and recommendation.
+- Lists the main reasons behind the recommendation.
+- Lists controls required before release.
+- Produces a final recommendation such as Approve, Conditional or Mitigate.
+- The report is printable using the browser Print / Save as PDF function.
+- The report is not populated with unrelated static numbers.
+- Copy Summary creates a concise case summary for demonstration or review notes.
+
+9. FULL CASE DEMONSTRATION
+--------------------------
+- The top-level Run full case demo walks the active case through risk intelligence, funding, repayment, exposure and decision report.
+- This is intended to demonstrate the product story to faculty without requiring the presenter to manually find every screen.
+- The automated sequence is based on the same functions used by the manual workflow; it is not a fake video of functionality.
+
+10. DATASET EXPLORER
+--------------------
+- Loads the bundled sample loan-default CSV when the application is served from a local HTTP server.
+- Also accepts a user-selected CSV file.
+- Scores records with the same deterministic risk engine used by the case workflow.
+- Displays record count, High/Medium/Low counts, average score and historical default rate.
+- Supports search, risk filtering and sorting.
+- Historical default is treated as an observed validation outcome, not as an input into the risk score.
+
+11. MANUAL ASSESSMENT / QA
+--------------------------
+- Allows a reviewer to create a custom hypothetical borrower case.
+- Inputs include income, loan amount, credit score, DTI, employment months and credit lines.
+- Uses the same scoring logic as the main case workflow.
+- Shows score, drivers and recommended action.
+- Useful for demonstrations, boundary testing and future QA expansion.
+
+12. NON-FUNCTIONAL QUALITY
+--------------------------
+- Responsive layout for desktop, tablet and mobile widths.
+- Keyboard-accessible form controls and visible focus behaviour.
+- No external JavaScript libraries are required for the core workflow.
+- Calculations run locally in the browser for fast feedback.
+- User-provided data is not silently sent to an external service.
+- HTML, CSS and JavaScript are separated for maintainability.
+- Branding assets and the logo-reveal video are bundled locally.
+- Print styling is provided for the final decision report.
+- The interface intentionally uses restrained monochrome styling to match the supplied RISKORA government-finance branding.
+
+13. CURRENT LIMITATIONS / FUTURE INTEGRATION
+--------------------------------------------
+- Production login/authentication is not connected.
+- Persistent database storage is not connected.
+- Production AI/ML inference is not connected; V1.0 is deliberately explainable and deterministic.
+- Real credit-bureau, KYC, bank-statement and payment-provider integrations are not connected.
+- The project is a high-fidelity academic prototype and should not be treated as a production lending decision system.
+
+END-TO-END STORY
+----------------
+Loan Request
+    ↓
+Borrower Investigation
+    ↓
+Explainable Risk Score
+    ↓
+Risk Drivers + Controls
+    ↓
+Funding Optimisation
+    ↓
+Repayment / Amortisation
+    ↓
+Lender Exposure
+    ↓
+Final Decision
+    ↓
+Printable Decision Report
+
+The key design principle is: every downstream module consumes the state produced by the previous stage. This prevents the application from feeling like a collection of unrelated dummy screens.
