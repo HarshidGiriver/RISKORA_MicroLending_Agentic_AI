@@ -10,7 +10,7 @@ def configured_path(name, default):
     return path.resolve() if path.is_absolute() else (PROJECT_ROOT / path).resolve()
 
 
-DB_PATH = configured_path("RISKORA_DB_PATH", "data/riskora.db")
+DB_PATH = configured_path("RISKORA_DB_PATH", "data/runtime/riskora.db")
 DATA_PATH = configured_path("RISKORA_DATA_PATH", "data/loan_default_full.csv")
 ARTIFACTS_DIR = configured_path("RISKORA_ARTIFACTS_DIR", "ml/artifacts")
 HOST = os.environ.get("RISKORA_HOST", "127.0.0.1")

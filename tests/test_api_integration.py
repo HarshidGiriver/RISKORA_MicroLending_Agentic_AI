@@ -85,6 +85,7 @@ class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
         self.assertIn("comparison", data)
 
     def test_funding_optimize_endpoint(self):
+        self.approve_seed()
         payload = {
             "loanId": "LR-1054",
             "amount": 120000,
@@ -100,6 +101,7 @@ class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
         self.assertIn("herfindahl_index", data)
 
     def test_repayment_generate_endpoint(self):
+        self.fund_seed()
         payload = {
             "loanId": "LR-1054",
             "principal": 120000,
@@ -123,6 +125,7 @@ class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
         self.assertIn("summary_stats", data)
 
     def test_repayment_record_payment(self):
+        self.fund_seed()
         # 1. First generate a schedule for LR-1054
         gen_payload = {
             "loanId": "LR-1054",
@@ -132,13 +135,14 @@ class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
             "scheduleType": "monthly",
             "allocationPolicy": "pro-rata"
         }
-        self.fetch("/api/repayment/generate", method="POST", body=json.dumps(gen_payload))
+        plan = json.loads(self.fetch("/api/repayment/generate", method="POST", body=json.dumps(gen_payload)).body)
         
         # 2. Record payment for installment #1
         pay_payload = {
             "loanId": "LR-1054",
             "installmentNum": 1,
-            "amount": 10661.85
+            "amount": plan["installments"][0]["payment_amount"],
+            "scheduleId": plan["id"], "idempotencyKey": "test-payment-0001"
         }
         response = self.fetch("/api/repayment/record", method="POST", body=json.dumps(pay_payload))
         self.assertEqual(response.code, 200)
@@ -151,7 +155,7 @@ class TestRiskoraAPI(IsolatedDatabaseMixin, tornado.testing.AsyncHTTPTestCase):
         # Record payment for loan without existing schedule (LR-1048)
         pay_payload = {
             "loanId": "LR-1048",
-            "installmentNum": 1
+            "installmentNum": 1, "amount":100, "idempotencyKey":"test-missing-schedule"
         }
         response = self.fetch("/api/repayment/record", method="POST", body=json.dumps(pay_payload))
         self.assertEqual(response.code, 409)

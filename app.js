@@ -5,7 +5,7 @@
 
 // Utility helpers
 const $ = id => document.getElementById(id);
-const money = n => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
+const money = n => `₹${(Number(n) || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 const num = v => Number.isFinite(Number(v)) ? Number(v) : null;
 
@@ -17,6 +17,8 @@ let fundingPreview = null;
 let activeRepayment = null;
 let currentPage = 'overview';
 let demoTimer = null;
+let caseLoadVersion = 0;
+let queueLoadVersion = 0;
 
 let datasetState = {
   page: 1,
@@ -75,7 +77,7 @@ function showToast(message, type = 'info', title = '') {
 async function apiCall(endpoint, options = {}) {
   try {
     const res = await fetch(endpoint, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Riskora-Request': '1' },
       signal: AbortSignal.timeout(30000),
       ...options
     });
@@ -84,6 +86,7 @@ async function apiCall(endpoint, options = {}) {
       try {
         errBody = await res.json();
       } catch {}
+      if (res.status === 401 && !endpoint.startsWith('/api/auth/')) lockWorkspace();
       const msg = errBody.error || `API Error ${res.status}: ${res.statusText}`;
       throw new Error(msg);
     }
@@ -95,66 +98,7 @@ async function apiCall(endpoint, options = {}) {
 }
 
 // 1. Initial Access Gate & Video Reveal
-function initEntry() {
-  const gate = $('accessGate');
-  const intro = $('introGate');
-  const video = $('logoReveal');
-  const shell = $('appShell');
-  shell.style.visibility = 'hidden';
-
-  const savedReviewer = sessionStorage.getItem('riskora_reviewer');
-  if (savedReviewer) {
-    $('reviewerName').value = savedReviewer;
-  }
-
-  $('accessForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const name = $('reviewerName').value.trim() || 'Senior Underwriter';
-    sessionStorage.setItem('riskora_reviewer', name);
-    $('reviewerLabel').textContent = `REVIEWER · ${name.toUpperCase()}`;
-
-    // Record login with backend
-    try {
-      await apiCall('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ name })
-      });
-    } catch (err) {
-      console.warn('Auth recording skipped offline', err);
-    }
-
-    gate.style.display = 'none';
-    intro.classList.add('playing');
-    intro.setAttribute('aria-hidden', 'false');
-    video.currentTime = 0;
-    video.muted = false;
-
-    try {
-      await video.play();
-    } catch {
-      video.muted = true;
-      try {
-        await video.play();
-      } catch {
-        intro.classList.add('failed');
-        setTimeout(enterApp, 1200);
-      }
-    }
-  });
-
-  const enterApp = () => {
-    intro.classList.remove('playing', 'failed');
-    intro.setAttribute('aria-hidden', 'true');
-    shell.style.visibility = 'visible';
-    shell.setAttribute('aria-hidden', 'false');
-  };
-
-  video.addEventListener('ended', enterApp);
-  video.addEventListener('error', () => {
-    intro.classList.add('failed');
-    setTimeout(enterApp, 1200);
-  });
-}
+function initEntry() { initializeAccess(); }
 
 // 2. Navigation & Page Switching
 function showPage(page) {
@@ -177,7 +121,7 @@ function showPage(page) {
   $('pageTitle').textContent = titles[page] || page;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  if (page === 'decision') renderDecision();
+  if (page === 'decision') { renderDecision(); renderReview(); }
   if (page === 'cases') loadCaseQueue();
   if (page === 'intelligence' && activeAnalysis) renderIntelligence(activeAnalysis);
   if (page === 'funding') renderFunding();
@@ -189,25 +133,23 @@ function showPage(page) {
 
 // 3. Journey & Workflow Stage Calculator
 function stageIndex() {
-  let n = 1; // 1: Request received
-  if (activeAnalysis) n = 2; // 2: Risk investigated
-  if (activeFunding && !activeFunding.preview) n = 3; // 3: Funding optimised
-  if (activeRepayment) n = 4; // 4: Repayment simulated
-  if (activeFunding && activeRepayment) n = 5; // 5: Exposure quantified
-  if (activeAnalysis && activeFunding && activeRepayment) n = 6; // 6: Decision assembled
-  if (activeAnalysis && activeFunding && activeRepayment) n = 7; // 7: Report ready
-  return n;
+  if (activeCase?.status === 'CLOSED' || activeCase?.status === 'FULLY_PAID') return 7;
+  if (activeCase?.status === 'REPAYING') return 6;
+  if (activeRepayment) return 5;
+  if (activeFunding) return 4;
+  if (activeCase?.status === 'APPROVED' || activeCase?.status === 'REJECTED') return 3;
+  return activeAnalysis ? 2 : 1;
 }
 
 function renderJourney() {
   const stages = [
-    ['Request received', 'Borrower attributes & requested exposure loaded.'],
-    ['Risk investigated', 'Calibrated ML inference, drivers & anomaly scan.'],
-    ['Funding optimised', 'Single vs. fractional syndication & HHI analysis.'],
-    ['Repayment simulated', 'Schedule generation & waterfall allocation.'],
-    ['Exposure quantified', 'Lender portfolio concentration evaluated.'],
-    ['Decision assembled', 'Underwriting disposition & controls reconciled.'],
-    ['Report ready', 'Auditable risk dossier compiled for export.']
+    ['Loan saved', 'Borrower inputs saved and validated.'],
+    ['Risk assessed', 'Model prediction and input quality checks.'],
+    ['Human decision', 'Reviewer records approval, rejection or verification needs.'],
+    ['Funding committed', 'Approved local lender allocations saved.'],
+    ['Schedule generated', 'Repayment terms and allocation policy saved.'],
+    ['Payments recorded', 'Actual receipts reduce lender exposure.'],
+    ['Loan closed', 'All scheduled installments paid; report remains available.']
   ];
   const n = stageIndex();
   $('journey').innerHTML = stages.map((s, i) => `
@@ -229,7 +171,7 @@ function renderOverview() {
   $('heroCaseId').textContent = activeCase.id;
   if ($('topCaseId')) $('topCaseId').textContent = activeCase.id;
   $('heroCaseName').textContent = `${activeCase.borrower_name || activeCase.name} · ${money(activeCase.loan_amount || activeCase.amount)} request`;
-  $('heroStage').textContent = activeAnalysis ? `RISK ASSESSED (${activeAnalysis.risk_level})` : 'REQUEST RECEIVED';
+  $('heroStage').textContent = activeCase.status.replaceAll('_', ' ');
   
   if (activeAnalysis) {
     $('mScore').textContent = activeAnalysis.risk_score;
@@ -260,6 +202,7 @@ function renderOverview() {
 }
 
 function decisionText() {
+  if (activeCase && ['APPROVED','REJECTED','FUNDED','REPAYMENT_CONFIGURED','REPAYING','CLOSED'].includes(activeCase.status)) return activeCase.status.replaceAll('_',' ');
   if (!activeAnalysis) return 'Pending Analysis';
   if (activeAnalysis.risk_level === 'HIGH') {
     return 'Human review required · High risk';
@@ -272,12 +215,14 @@ function decisionText() {
 
 // 5. Load Case Queue from Backend API
 async function loadCaseQueue() {
+  const version = ++queueLoadVersion;
   const search = $('caseSearch')?.value || '';
   const filterBtn = document.querySelector('.filter.active');
   const filter = filterBtn?.dataset.filter || 'all';
 
   try {
     const data = await apiCall(`/api/loans?search=${encodeURIComponent(search)}&filter=${filter}`);
+    if (version !== queueLoadVersion) return;
     renderCaseTable(data.loans || []);
     renderOverviewCards(data.loans || []);
   } catch (err) {
@@ -346,10 +291,13 @@ function renderCaseTable(loans) {
 
 // 6. Open Case by ID from Backend
 async function openCaseById(id, switchPage = true) {
+  const version = ++caseLoadVersion;
   try {
     const loan = await apiCall(`/api/loans/${id}`);
+    if (version !== caseLoadVersion) return;
     activeCase = loan;
-    activeAnalysis = loan.assessment || null;
+    sessionStorage.setItem('riskora_case', loan.id);
+    activeAnalysis = loan.status === 'REQUEST_RECEIVED' ? null : loan.assessment || null;
     activeFunding = loan.funding || null;
     fundingPreview = null;
     activeRepayment = loan.repayment || null;
@@ -358,6 +306,7 @@ async function openCaseById(id, switchPage = true) {
     $('repPrincipal').value = loan.repayment?.original_principal ?? loan.loan_amount;
     $('repRate').value = loan.repayment?.annual_interest_rate ?? loan.interest_rate;
     $('repTerm').value = loan.repayment?.term_months ?? loan.loan_term;
+    ['repPrincipal','repRate','repTerm'].forEach(id => $(id).readOnly = Boolean(loan.funding));
     $('repDate').value = loan.repayment?.installments?.[0]?.due_date ?? '';
     $('repScheduleType').value = loan.repayment?.schedule_type ?? 'monthly';
     $('repAllocationPolicy').value = loan.repayment?.allocation_policy ?? 'pro-rata';
@@ -368,6 +317,7 @@ async function openCaseById(id, switchPage = true) {
     $('scenarioDtiSlider').value = loan.dti_ratio ?? 0.32;
 
     renderOverview();
+    renderReview();
     renderIntelligence(activeAnalysis);
     renderFunding();
     renderRepayment();
@@ -406,8 +356,8 @@ async function runAnalysis() {
       })
     });
 
-    activeAnalysis = result;
-    renderIntelligence(result);
+    await openCaseById(activeCase.id, false);
+    renderIntelligence(activeAnalysis);
     renderOverview();
     updateScenarioLab();
     showToast(`Calibrated assessment complete: ${result.risk_level} RISK (Score ${result.risk_score}/100, PD ${result.probability_pct}%)`, 'success', 'Model Inference Complete');
@@ -486,7 +436,7 @@ function renderIntelligence(res) {
   $('dqBar').style.background = dq.data_quality_score >= 80 ? 'var(--green)' : 'var(--amber)';
   $('dqBadge').textContent = dq.quality_tier || 'ACCEPTABLE';
   $('dqBadge').className = `status-chip ${dq.quality_tier === 'EXCELLENT' ? 'done' : ''}`;
-  $('dqFieldsCount').textContent = `${dq.available_fields_count ?? 0} / ${dq.total_fields_count || 15} required & optional fields verified (${dq.completeness_pct ?? 0}%)`;
+  $('dqFieldsCount').textContent = `${dq.available_fields_count ?? 0} / ${dq.total_fields_count || 15} required & optional inputs present (${dq.completeness_pct ?? 0}%)`;
 
   const dqWarns = [
     ...(dq.missing_required_fields || []).map(m => `Missing: ${m}`),
@@ -495,7 +445,7 @@ function renderIntelligence(res) {
   ];
   $('dqWarnings').innerHTML = dqWarns.length
     ? dqWarns.map(w => `<div style="margin-top:4px;">• ${esc(w)}</div>`).join('')
-    : '<div style="color:var(--green); margin-top:4px;">✓ Full documentation & validity verified.</div>';
+    : '<div style="color:var(--green); margin-top:4px;">✓ Input rules passed. Supporting documents still need human verification.</div>';
 
   // Render Anomaly Detection
   const anom = res.anomaly_indicators || {};
@@ -581,7 +531,7 @@ async function optimizeFunding(commit = false) {
       })
     });
 
-    if (commit === true) { activeFunding = result; fundingPreview = null; }
+    if (commit === true) { await openCaseById(activeCase.id, false); fundingPreview = null; }
     else fundingPreview = {...result, preview: true};
     renderFunding();
     renderOverview();
@@ -655,9 +605,9 @@ function renderFunding() {
 }
 
 function applyFunding() {
-  if (!activeAnalysis) {
-    runAnalysis().then(ok => { if (ok) optimizeFunding(true).then(saved => { if (saved) showPage('repayment'); }); });
-    return;
+  if (activeCase?.status !== 'APPROVED') {
+    showToast('Record an approval in Human review before committing funding.', 'warning');
+    showPage('decision'); return;
   }
   optimizeFunding(true).then(ok => { if (ok) showPage('repayment'); });
 }
@@ -695,7 +645,7 @@ async function generateRepayment() {
       })
     });
 
-    activeRepayment = result;
+    await openCaseById(activeCase.id, false);
     renderRepayment();
     renderOverview();
     showToast(`Amortisation plan generated (${result.num_installments} installments @ ${result.annual_interest_rate}% APR, EMI: ${money(result.indicative_emi)})`, 'success', 'Amortisation Ready');
@@ -745,11 +695,11 @@ function renderRepayment() {
         <td>${money(inst.principal_component)}</td>
         <td>${money(inst.interest_component)}</td>
         <td><b>${money(inst.remaining_balance)}</b></td>
-        <td><span class="${isPaid ? 'badge-paid' : 'badge-scheduled'}">${isPaid ? '● PAID' : '○ SCHEDULED'}</span></td>
+        <td><span class="${isPaid ? 'badge-paid' : 'badge-scheduled'}">${isPaid ? '● PAID' : inst.status === 'PARTIAL' ? '◐ PARTIAL' : '○ SCHEDULED'}</span></td>
         <td>
           ${isPaid 
             ? `<span style="color:#15803d; font-size:10px; font-weight:700;">✓ Settled</span>` 
-            : `<button class="pay-btn" onclick="recordPaymentEvent(${inst.installment_num}, ${inst.payment_amount}, this)">Record Payment</button>`}
+            : `<button class="pay-btn" onclick="recordPaymentEvent(${inst.installment_num}, ${Number((inst.payment_amount - (inst.actual_amount_paid || 0)).toFixed(2))}, this)">Record Payment</button>`}
         </td>
       </tr>
     `;
@@ -759,35 +709,8 @@ function renderRepayment() {
   $('scheduleStatus').className = 'status-chip done';
 }
 
-async function recordPaymentEvent(instNum, amount, btnEl) {
-  if (!activeCase) return;
-  const btn = btnEl || (window.event && window.event.target);
-  if (btn && btn.tagName === 'BUTTON') {
-    btn.disabled = true;
-    btn.textContent = 'Recording...';
-  }
-  try {
-    const res = await apiCall('/api/repayment/record', {
-      method: 'POST',
-      body: JSON.stringify({
-        loanId: activeCase.id,
-        installmentNum: instNum,
-        amount
-      })
-    });
-    showToast(`Installment #${instNum} (${money(amount)}) recorded as PAID. Relational ledger reconciled.`, 'success', 'Payment Settled');
-    // Refresh case details cleanly in-place without page flickering
-    await openCaseById(activeCase.id, false);
-    renderRepayment();
-    renderOverview();
-    loadExposurePortfolio();
-  } catch (err) {
-    showToast(`Failed to record payment: ${err.message}`, 'error', 'Payment Failed');
-    if (btn && btn.tagName === 'BUTTON') {
-      btn.disabled = false;
-      btn.textContent = 'Record Payment';
-    }
-  }
+function recordPaymentEvent(instNum, amount) {
+  if (activeCase) openPaymentDialog(instNum, amount);
 }
 
 // 11. Exposure Monitor
@@ -797,19 +720,17 @@ async function loadExposurePortfolio() {
     const port = data.portfolio_summary || {};
     
     const committed = activeFunding && !activeFunding.preview ? activeFunding.total_requested : 0;
-    const outstanding = activeRepayment && activeRepayment.installments
-      ? Math.max(0, activeRepayment.original_principal - activeRepayment.installments.filter(i => i.status === 'PAID').reduce((sum, i) => sum + i.principal_component, 0))
-      : committed;
+    const outstanding = activeCase?.ledger?.outstanding_principal ?? committed;
 
     $('expCommitted').textContent = money(committed);
-    $('expOutstanding').textContent = money(outstanding);
+    $('expOutstanding').textContent = activeCase?.ledger?.requires_reconciliation ? 'Review required' : money(outstanding);
     $('expLargest').textContent = activeFunding ? `${activeFunding.largest_lender_share}%` : '100.0%';
     $('expConcentration').textContent = activeFunding ? `HHI ${activeFunding.herfindahl_index}` : 'HHI 10000';
 
     if (activeFunding && !activeFunding.preview) {
       $('exposureRows').innerHTML = activeFunding.positions.map(p => {
         const pCommitted = p.committed_amount;
-        const paidPrincipal = (activeRepayment?.installments || []).filter(i => i.status === 'PAID').flatMap(i => i.allocations || []).filter(a => a.lender_id === p.lender_id).reduce((sum, a) => sum + a.principal_allocated, 0);
+        const paidPrincipal = activeCase?.ledger?.lender_principal_paid?.[p.lender_id] ?? 0;
         const pOut = Math.max(0, pCommitted - paidPrincipal);
         return `
           <div class="exposure-row">
@@ -818,13 +739,13 @@ async function loadExposurePortfolio() {
               <span>${p.share_pct}% committed pool</span>
             </div>
             <div><span>Committed</span><strong>${money(pCommitted)}</strong></div>
-            <div><span>Outstanding</span><strong>${money(pOut)}</strong></div>
+            <div><span>Outstanding</span><strong>${activeCase?.ledger?.requires_reconciliation ? 'Review required' : money(pOut)}</strong></div>
           </div>
         `;
       }).join('');
 
       $('exposureHeadline').textContent = activeFunding.concentration_rating.replace('_', ' ');
-      $('exposureNarrative').textContent = activeFunding.concentration_description;
+      $('exposureNarrative').textContent = activeCase?.ledger?.warning || activeFunding.concentration_description;
       $('exposureMeter').innerHTML = `
         <div class="exposure-meter">
           <div class="meter-track"><i style="width:${Math.min(100, activeFunding.largest_lender_share)}%"></i></div>
@@ -887,11 +808,12 @@ function renderDecision() {
         <b>${activeRepayment ? `${money(activeRepayment.indicative_emi)} / mo` : 'Pending'}</b>
       </div>
       <div>
-        <span>Recommendation</span>
-        <b style="color:${rec.includes('Approve') ? 'var(--green)' : 'var(--red)'};">${rec}</b>
+        <span>Workflow status / recommendation</span>
+        <b style="color:${rec === 'APPROVED' ? 'var(--green)' : 'var(--red)'};">${rec}</b>
       </div>
     </div>
 
+    <div class="decision-meta"><div><span>Payments received</span><b>${money(activeCase.ledger?.received ?? 0)}</b></div><div><span>Outstanding principal</span><b>${activeCase.ledger?.requires_reconciliation ? 'Review required' : money(activeCase.ledger?.outstanding_principal ?? 0)}</b></div><div><span>Payment receipts</span><b>${activeCase.ledger?.payment_count ?? 0}</b></div></div>
     <div class="report-grid">
       <div class="report-block">
         <h3>POLICY RULE INDICATORS</h3>
@@ -910,11 +832,11 @@ function renderDecision() {
         <ul class="report-list">
           <li>
             <b>Data Quality Index: ${dq.data_quality_score ?? 0}/100 (${dq.quality_tier || 'ACCEPTABLE'})</b><br>
-            <span>${dq.available_fields_count ?? 0} of ${dq.total_fields_count || 15} required verification items validated.</span>
+            <span>${dq.available_fields_count ?? 0} of ${dq.total_fields_count || 15} input fields present. These checks do not verify documents.</span>
           </li>
           <li>
             <b>Anomaly Scan: ${anom.anomaly_detected ? 'ANOMALY DETECTED' : 'CLEAN PROFILE'}</b><br>
-            <span>${esc(anom.recommendation || 'Standard verification protocols satisfied.')}</span>
+            <span>${esc(anom.recommendation || 'No input rule anomalies detected; external checks are not connected.')}</span>
           </li>
           <li>
             <b>Review Level: ${esc(ass.review_level)}</b><br>
@@ -928,17 +850,15 @@ function renderDecision() {
       <div class="eyebrow">FINAL UNDERWRITING DISPOSITION</div>
       <strong>${rec}</strong>
       <p style="margin-top:6px; font-size:11px; line-height:1.6;">
-        ${rec === 'Standard Approval' 
-          ? 'Borrower meets prime micro-lending criteria with low default hazard (PD < 8.0%). Single-lender or fractional syndication eligible.' 
-          : (rec === 'Conditional Approval' 
-            ? 'Moderate default probability (8.0%–20.0%). Approval is strictly contingent on multi-lender fractional syndication to distribute exposure concentration, together with secondary verification of income proofs.' 
-            : 'Elevated default hazard (PD ≥ 20.0%). Principal loss exposure exceeds standard single-counterparty tolerances. Do not release capital without additional co-signer guarantees or senior credit committee override.')}
+        ${ass.risk_level === 'LOW' ? 'The model estimates PD below 8%. Verify borrower documents before making a lending decision.' : ass.risk_level === 'MEDIUM' ? 'The model estimates PD from 8% to below 20%. Review affordability and supporting documents.' : 'The model estimates PD of at least 20%. Review the elevated default risk and supporting documents.'}
+        Fractional funding changes lender concentration; it does not change borrower default risk.
+        ${activeCase.review_decision ? `Recorded review: ${esc(activeCase.review_decision.decision)} by ${esc(activeCase.review_decision.username)}. ${esc(activeCase.review_decision.note)}` : 'No human decision has been recorded.'}
       </p>
     </div>
 
     <div style="margin-top:20px; font-size:9px; color:#8a929a; border-top:1px solid var(--line2); padding-top:12px; display:flex; justify-content:space-between;">
       <span>Model Engine: ${ass.model_metadata?.version || 'riskora-ml-v1.0'} (${ass.model_metadata?.algorithm || 'HistGradientBoosting'})</span>
-      <span>Target Leakage Check: Verified Isolated (Default Ground Truth Excluded)</span>
+      <span>Synthetic training data · Policy indicators are not model-specific attribution</span>
       <span>Generated: ${new Date().toISOString().slice(0, 19).replace('T', ' ')} UTC</span>
     </div>
   `;
@@ -1191,7 +1111,5 @@ function bindEvents() {
 window.addEventListener('DOMContentLoaded', () => {
   initEntry();
   bindEvents();
-  // Open default seed case
-  openCaseById('LR-1054');
-  loadCaseQueue();
+
 });

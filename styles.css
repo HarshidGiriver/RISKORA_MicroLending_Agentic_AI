@@ -91,3 +91,22 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .term-grid input,.term-grid select{max-width:100%;min-width:0}.search{min-width:0}
 }
 :focus-visible{outline:3px solid #3b82f6;outline-offset:3px}
+/* Integrated borrower intake, ORA review and payment dialogs */
+dialog { border:1px solid #cbd2d7; border-radius:12px; padding:28px; width:min(760px,94vw); max-height:90vh; color:#18212a; background:#fff; }
+dialog::backdrop { background:rgba(15,23,32,.65); }
+dialog form, #reviewForm { display:grid; gap:16px; }
+dialog label, #reviewForm label { display:grid; gap:6px; font-size:13px; font-weight:600; }
+dialog input, dialog select, #reviewForm select, #reviewForm textarea { min-width:0; width:100%; box-sizing:border-box; padding:10px; border:1px solid #bec7ce; border-radius:5px; background:#fff; color:#18212a; font:inherit; }
+.integration-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.dialog-actions { display:flex; justify-content:flex-end; gap:10px; }
+#reviewPanel { margin-bottom:24px; padding:24px; }
+#reviewPanel p { line-height:1.6; margin:12px 0; }
+.evidence-item { padding:14px; background:#f3f5f7; border-radius:6px; }
+.digest { overflow-wrap:anywhere; font-size:11px; }
+#accessForm > input { box-sizing:border-box; width:100%; padding:14px; border:1px solid #bec7ce; border-radius:5px; margin-bottom:12px; }
+#accessMessage { display:block; line-height:1.6; white-space:normal; }
+#loanError, #paymentError, #accountError { color:#a32121; }
+.sidebar > .btn { margin:3px 14px; text-align:left; }
+button[hidden] { display:none!important; }
+@media(max-width:600px) { .integration-grid { grid-template-columns:1fr; } dialog { padding:18px; } }
+@media print { #reviewForm, #auditButton, .dialog-actions { display:none!important; } }

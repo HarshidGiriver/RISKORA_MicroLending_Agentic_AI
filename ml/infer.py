@@ -1,7 +1,7 @@
 """
-RISKORA — Machine Learning Inference & Local Explainability Service
-Loads the calibrated production model artifact and generates calibrated
-default probabilities, institutional risk scores, and local feature attributions.
+RISKORA — model inference and policy indicators.
+Loads the calibrated synthetic-data model and returns default probabilities,
+display scores and fixed policy rules, not model-specific feature attributions.
 """
 
 import os
@@ -73,8 +73,7 @@ class RiskInferenceEngine:
 
     def explain_instance(self, input_df: pd.DataFrame, pd_score: float) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Generates local feature attributions comparing the applicant against
-        benchmark distributions and empirical risk factors.
+        Returns fixed policy indicators, separate from the trained prediction.
         """
         drivers = []
         protective = []
@@ -227,12 +226,7 @@ class RiskInferenceEngine:
         # Predict calibrated probability of default
         prob_default = float(self.model.predict_proba(X_trans)[0, 1])
         
-        # Scale to institutional 0-100 risk score
-        # Non-linear logistic scaling mapped to operational range:
-        # PD 0.02 -> Score 12
-        # PD 0.08 -> Score 30 (Low/Med boundary)
-        # PD 0.20 -> Score 60 (Med/High boundary)
-        # PD 0.50 -> Score 88
+        # Piecewise linear display mapping, clamped to 5–99 below.
         if prob_default < self.thresh_low:
             # Range 0 to 30
             risk_score = int(round((prob_default / self.thresh_low) * 30))
@@ -280,8 +274,8 @@ class RiskInferenceEngine:
                 "test_brier": self.metadata.get("test_metrics", {}).get("brier_score", 0.082)
             },
             "explainability_disclosure": (
-                "Feature attribution indicates statistical correlation and model impact from empirical historical loan data. "
-                "Attributions represent decision-support signals, not deterministic causal laws. Final decisions rest with credit underwriters."
+                "Policy rule indicators; these points are not trained-model feature attributions. "
+                "The prediction model was trained on synthetic data. Final decisions rest with human reviewers."
             )
         }
 

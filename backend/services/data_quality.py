@@ -45,5 +45,5 @@ class DataQualityEngine:
             "missing_optional_fields": missing_optional,
             "validity_warnings": warnings,
             "contradiction_flags": contradictions,
-            "verification_ready": not (missing_required or warnings or contradictions),
+            "verification_ready": not (missing_required or missing_optional or warnings or contradictions),
         }

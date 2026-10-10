@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RISKORA | AI/ML Micro-Lending Risk Platform</title>
 <meta name="description" content="RISKORA — AI-assisted risk-based framework and decision-support workstation for digital micro-lending.">
-<link rel="stylesheet" href="styles.css?v=workflow-3">
+<link rel="stylesheet" href="styles.css?v=ora-1">
 </head>
 <body>
 <div id="accessGate" class="access-gate">
@@ -17,12 +17,13 @@
     <h1>From loan request<br><span>to defensible decision.</span></h1>
     <p class="access-copy">RISKORA connects calibrated machine-learning risk prediction, data quality scanning, anomaly detection, syndicated funding optimisation, and waterfall repayment into one unified decision trail.</p>
     <form id="accessForm">
-      <label for="reviewerName">UNDERWRITER / REVIEWER NAME</label>
+      <label for="reviewerName">REVIEWER USERNAME</label>
       <div class="access-input-row">
-        <input id="reviewerName" required autocomplete="name" placeholder="Enter your name (e.g. Dr. Reviewer)">
-        <button type="submit">ENTER WORKSPACE <span>→</span></button>
+        <input id="reviewerName" required autocomplete="username" placeholder="Your username">
+        <button id="accessSubmit" type="submit">SIGN IN →</button>
       </div>
-      <small>REVIEWER LABEL ONLY · AUTHENTICATION NOT ENABLED · RISKORA-ML-V1.0 CONNECTED</small>
+      <label for="reviewerPassword">PASSWORD</label><input id="reviewerPassword" type="password" required minlength="12" maxlength="200" autocomplete="current-password">
+      <small id="accessMessage" role="status">Checking account setup…</small>
     </form>
   </div>
   <div class="access-footer">RISKORA <span>•</span> AI-ASSISTED RISK PLATFORM FOR DIGITAL MICRO-LENDING</div>
@@ -45,7 +46,7 @@
     <span class="live-dot"></span>
     <span id="reviewerLabel">REVIEWER · LIVE SESSION</span>
   </div>
-  <nav class="nav-group">
+  <button class="btn" id="newLoan">Create loan</button><button class="btn" id="editLoan">Edit current loan</button><button class="btn" id="manageAccounts" hidden>Add reviewer account</button><button class="btn" id="logoutButton">Sign out</button><nav class="nav-group">
     <div class="nav-label">DECISION WORKFLOW</div>
     <button class="nav active" data-page="overview"><span>01</span> Command Center</button>
     <button class="nav" data-page="cases"><span>02</span> Loan Request Queue</button>
@@ -194,7 +195,7 @@
     <div>
       <div class="eyebrow">03 · CALIBRATED RISK INTELLIGENCE</div>
       <h1>Evidence-based risk & explainability.</h1>
-      <p>Calibrated probability of default, local feature attribution, data quality scoring, and anomaly detection.</p>
+      <p>Calibrated probability of default, policy rule indicators, data quality scoring, and anomaly detection.</p>
     </div>
     <button class="btn dark" data-action="analyze">Run / Refresh ML Analysis</button>
   </div>
@@ -242,7 +243,7 @@
       </div>
       <div class="ai-note">
         <b>Explainability & Causality Disclosure</b>
-        <span id="explainabilityText">Feature attributions represent empirical statistical correlations with historical default outcomes. They serve as decision-support signals and should not be construed as absolute causal determinants.</span>
+        <span id="explainabilityText">Explanation points are fixed policy rules, not trained-model attribution. Model predictions use synthetic training data.</span>
       </div>
     </div>
 
@@ -544,12 +545,12 @@
 </section>
 
 <!-- PAGE 7: DECISION REPORT -->
-<section id="decision" class="page">
+<section id="decision" class="page"><div id="reviewPanel" class="panel"></div>
   <div class="page-head">
     <div>
       <div class="eyebrow">07 · COMPREHENSIVE DECISION REPORT</div>
       <h1>Auditable underwriting dossier.</h1>
-      <p>Complete risk intelligence trail assembled for regulatory compliance and credit committees.</p>
+      <p>Saved model output, reviewer decisions and local financial records.</p>
     </div>
     <div class="hero-actions">
       <button class="btn" data-action="copy-summary">Copy Summary</button>
@@ -661,7 +662,7 @@
     <div class="panel">
       <div class="eyebrow">DECISION MATRIX @ 0.20 THRESHOLD</div>
       <h2>Test set confusion matrix</h2>
-      <p style="font-size:11px; margin-bottom:15px;">Evaluated on 1,800 completely unseen loan records with 199 actual defaults.</p>
+      <p style="font-size:11px; margin-bottom:15px;">Evaluated on 1,800 completely unseen loan records with 199 synthetic default labels.</p>
       <div class="confusion-grid">
         <div class="cm-cell">
           <span>True Negatives (TN)</span>
@@ -686,7 +687,7 @@
       </div>
       <div class="ai-note" style="margin-top:15px;">
         <b>Threshold Policy Justification</b>
-        <span>Cutoff is calibrated at 0.20 PD because an unmitigated default costs the lending institution ~4× more in principal loss than the operational overhead of extra verification on a performing borrower.</span>
+        <span>The 0.20 PD threshold is a demo policy choice using a stated 4:1 cost assumption. Real-world cost calibration has not been validated.</span>
       </div>
     </div>
 
@@ -775,7 +776,7 @@
     <div class="panel" id="manualResult">
       <div class="empty">
         <h2>Sandbox Ready</h2>
-        <p>Submit custom values to execute real-time inference, attribution, and data validation.</p>
+        <p>Submit custom values to execute real-time inference, policy indicators, and data validation.</p>
       </div>
     </div>
   </div>
@@ -784,6 +785,9 @@
 </main>
 </div>
 
-<script src="app.js?v=workflow-3"></script>
+<dialog id="loanDialog" aria-labelledby="loanFormTitle"><form id="loanForm"><h2 id="loanFormTitle">Create loan</h2><p>Save borrower inputs, then assess risk and record a human review decision.</p><div id="loanFields" class="integration-grid"></div><p id="loanError" role="alert"></p><div class="dialog-actions"><button type="button" class="btn" data-close="loanDialog">Cancel</button><button class="btn dark" type="submit">Save loan</button></div></form></dialog>
+<dialog id="paymentDialog" aria-labelledby="paymentTitle"><form id="paymentForm"><h2 id="paymentTitle">Record payment</h2><p id="paymentDue"></p><label>Amount (₹)<input id="paymentAmount" required type="number" min="0.01" step="0.01"></label><label>Payment reference<input id="paymentReference" required minlength="8" maxlength="100"></label><p>Use the same reference when retrying the same payment. This records a payment received; it does not transfer money.</p><p id="paymentError" role="alert"></p><div class="dialog-actions"><button class="btn" type="button" data-close="paymentDialog">Cancel</button><button class="btn dark" type="submit">Record payment</button></div></form></dialog>
+<dialog id="accountDialog" aria-labelledby="accountTitle"><form id="accountForm"><h2 id="accountTitle">Add account</h2><label>Username<input name="username" required minlength="3" maxlength="80" autocomplete="off"></label><label>Password<input name="password" required type="password" minlength="12" maxlength="200" autocomplete="new-password"></label><label>Role<select name="role"><option>REVIEWER</option><option>VIEWER</option><option>ADMIN</option></select></label><p id="accountError" role="alert"></p><div class="dialog-actions"><button class="btn" type="button" data-close="accountDialog">Cancel</button><button class="btn dark">Create account</button></div></form></dialog>
+<script src="app.js?v=ora-1"></script><script src="integration.js?v=ora-1"></script>
 </body>
 </html>

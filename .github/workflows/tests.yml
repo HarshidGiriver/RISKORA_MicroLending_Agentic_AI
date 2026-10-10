@@ -18,3 +18,9 @@ jobs:
       - run: python -m pip check
       - run: python run.py --check
       - run: python -m unittest discover -s tests -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check app.js
+      - run: node --check integration.js

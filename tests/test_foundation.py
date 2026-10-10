@@ -97,6 +97,9 @@ class FoundationAPITests(IsolatedDatabaseMixin, AsyncHTTPTestCase):
         canonical = validate_profile(loan)
         saved = self.post("/api/risk/analyze", {"loanId": loan["id"]})
         direct = self.post("/api/risk/analyze", canonical)
+        self.assertIn("Policy rule indicators", saved["explainability_disclosure"])
+        self.assertIn("synthetic data", saved["explainability_disclosure"])
+        self.assertNotIn("empirical historical loan data", saved["explainability_disclosure"])
         for key in ("probability_of_default", "risk_score", "risk_level", "risk_drivers",
                     "protective_factors", "data_quality", "anomaly_indicators"):
             self.assertEqual(saved[key], direct[key], key)
@@ -125,7 +128,8 @@ class FoundationAPITests(IsolatedDatabaseMixin, AsyncHTTPTestCase):
 
     def test_queue_and_portfolio_use_one_latest_assessment(self):
         first = self.post("/api/risk/analyze", {"loanId": "LR-1054"})
-        last = self.post("/api/risk/analyze", {"loanId": "LR-1054", **COMPLETE_PROFILE})
+        self.post("/api/loans/LR-1054/edit", {"name":"Updated borrower", **COMPLETE_PROFILE})
+        last = self.post("/api/risk/analyze", {"loanId": "LR-1054"})
         self.assertNotEqual(first["risk_level"], last["risk_level"])
         # Force a timestamp tie to exercise the primary-key tie breaker.
         with database.get_connection() as conn:
@@ -293,14 +297,14 @@ class StartupTests(unittest.TestCase):
                     if process.poll() is not None:
                         self.fail(process.communicate()[1].decode(errors="replace"))
                     try:
-                        with urlopen(f"http://127.0.0.1:{port}/api/loans", timeout=1) as response:
+                        with urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1) as response:
                             payload = json.load(response)
                         break
                     except (URLError, TimeoutError):
                         time.sleep(0.1)
                 else:
                     self.fail("Server did not start within 30 seconds.")
-                self.assertEqual(payload["count"], 6)
+                self.assertEqual(payload["status"], "OPERATIONAL")
                 self.assertTrue(path.is_file())
             finally:
                 process.terminate()

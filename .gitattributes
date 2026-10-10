@@ -1,0 +1,9 @@
+# Preserve binary deliverables and serialized artifacts byte-for-byte.
+# Some Windows Git installations otherwise apply PDF text conversion.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.mp4 binary
+*.joblib binary
+*.db binary

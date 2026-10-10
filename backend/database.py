@@ -9,7 +9,7 @@ import sqlite3
 import json
 import datetime
 from contextlib import contextmanager
-from backend.config import DB_PATH as CONFIG_DB_PATH
+from backend.config import DB_PATH as CONFIG_DB_PATH, PROJECT_ROOT
 from typing import Dict, Any, List, Optional
 
 DB_PATH = str(CONFIG_DB_PATH)
@@ -28,6 +28,19 @@ def get_connection():
 def init_db():
     """Initializes schema and tables."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    # Copy the former tracked demo database only on the first default startup.
+    # Future accounts, sessions and financial records live in an ignored directory.
+    from pathlib import Path
+    runtime_path = PROJECT_ROOT / 'data' / 'runtime' / 'riskora.db'
+    legacy_path = PROJECT_ROOT / 'data' / 'riskora.db'
+    if Path(DB_PATH).resolve() == runtime_path and not runtime_path.exists() and legacy_path.exists():
+        source = sqlite3.connect(legacy_path.as_uri() + '?mode=ro', uri=True)
+        destination = sqlite3.connect(runtime_path)
+        try:
+            source.backup(destination)
+        finally:
+            source.close()
+            destination.close()
     with get_connection() as conn:
         cursor = conn.cursor()
         
@@ -157,6 +170,34 @@ def init_db():
         );
         """)
         
+        # Additive integration migration: existing loan and payment data stay intact.
+        cursor.executescript("""
+        CREATE TABLE IF NOT EXISTS reviewer_accounts (
+            id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL,
+            password_hash TEXT NOT NULL, role TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS reviewer_sessions (
+            token_hash TEXT PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES reviewer_accounts(id),
+            expires_at REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS review_decisions (
+            id INTEGER PRIMARY KEY, loan_id TEXT NOT NULL REFERENCES loans(id),
+            assessment_id INTEGER NOT NULL REFERENCES risk_assessments(id),
+            decision TEXT NOT NULL, note TEXT NOT NULL, reviewer_id INTEGER NOT NULL REFERENCES reviewer_accounts(id),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
+        """)
+        additions = {
+            'risk_assessments': {'input_snapshot_json': 'TEXT', 'reviewer_id': 'INTEGER'},
+            'payments': {'schedule_id': 'INTEGER', 'idempotency_key': 'TEXT'},
+        }
+        for table, columns in additions.items():
+            existing = {row[1] for row in cursor.execute(f'PRAGMA table_info({table})')}
+            for column, kind in columns.items():
+                if column not in existing:
+                    cursor.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
+        cursor.execute("UPDATE loans SET status='FUNDED' WHERE status='FUNDING_OPTIMIZED'")
+        cursor.execute("UPDATE loans SET status='CLOSED' WHERE status='FULLY_PAID'")
+        cursor.execute('CREATE UNIQUE INDEX IF NOT EXISTS payment_request_key ON payments(idempotency_key) WHERE idempotency_key IS NOT NULL')
         conn.commit()
 
 def seed_default_cases():

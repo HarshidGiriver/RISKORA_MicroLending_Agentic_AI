@@ -74,7 +74,7 @@ class TestRiskoraML(unittest.TestCase):
 class TestDataQuality(unittest.TestCase):
     def test_complete_profile(self):
         sample = {
-            "Income": 500000, "LoanAmount": 100000, "CreditScore": 700,
+            "Age":35, "Income": 500000, "LoanAmount": 100000, "CreditScore": 700,
             "DTIRatio": 0.25, "LoanTerm": 36, "MonthsEmployed": 48,
             "NumCreditLines": 4, "InterestRate": 12.0, "Education": "Bachelor's",
             "EmploymentType": "Salaried", "MaritalStatus": "Married",

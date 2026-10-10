@@ -11,6 +11,9 @@ import json
 import sqlite3
 import datetime
 import uuid
+import time
+import hashlib
+from backend.security import session_user, authenticate, new_session, create_account
 import numpy as np
 import pandas as pd
 import tornado.ioloop
@@ -39,6 +42,29 @@ def request_profile(raw, require_required=False):
 class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("X-Content-Type-Options", "nosniff")
+        self.set_header("Cache-Control", "no-store")
+        self.set_header("X-Frame-Options", "DENY")
+
+    def prepare(self):
+        self.reviewer = session_user(self.get_cookie('riskora_session'))
+        public = {'/api/health', '/api/auth/login', '/api/auth/setup'}
+        if self.request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            origin = self.request.headers.get('Origin')
+            if origin and origin != f'{self.request.protocol}://{self.request.host}':
+                raise tornado.web.HTTPError(403, reason='Cross-origin writes are not allowed.')
+            if self.request.headers.get('X-Riskora-Request') != '1':
+                raise tornado.web.HTTPError(403, reason='Missing request protection header.')
+        if self.request.path not in public:
+            if not self.reviewer:
+                raise tornado.web.HTTPError(401, reason='Sign in to continue.')
+            if self.request.method == 'POST' and self.request.path != '/api/auth/logout' and self.reviewer['role'] == 'VIEWER':
+                raise tornado.web.HTTPError(403, reason='A reviewer role is required for this action.')
+
+    def on_finish(self):
+        if self.request.method == 'POST' and self.get_status() < 300 and getattr(self, 'reviewer', None):
+            with get_connection() as conn:
+                conn.execute('INSERT INTO audit_logs(event_type,entity_id,reviewer,details_json) VALUES (?,?,?,?)',
+                    ('API_ACTION', self.request.path, str(self.reviewer['id']), json.dumps({'username':self.reviewer['username']})))
 
     def options(self, *args, **kwargs):
         self.set_status(204)
@@ -78,28 +104,27 @@ class HealthHandler(BaseHandler):
 
 # 2. Reviewer Auth Handler
 class AuthHandler(BaseHandler):
+    attempts = {}
     def post(self):
         data = self.get_json_body()
-        reviewer_name = data.get("name", "").strip() or "Senior Underwriter"
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            user_id = f"USR-{abs(hash(reviewer_name)) % 10000:04d}"
-            cursor.execute("""
-            INSERT INTO users (id, username, full_name, role)
-            VALUES (?, ?, ?, 'RISK_UNDERWRITER')
-            ON CONFLICT(username) DO UPDATE SET full_name = excluded.full_name;
-            """, (user_id, reviewer_name.lower().replace(" ", "_"), reviewer_name))
-            conn.commit()
-            
-        self.write_json({
-            "success": True,
-            "user": {
-                "id": user_id,
-                "name": reviewer_name,
-                "role": "CHIEF_RISK_ANALYST",
-                "session_active": True
-            }
-        })
+        username, password = data.get('username', ''), data.get('password', '')
+        if not isinstance(username, str) or not isinstance(password, str) or len(password) > 200:
+            raise tornado.web.HTTPError(400, reason='Invalid credentials format.')
+        now = time.monotonic()
+        self.attempts = type(self).attempts
+        for ip in list(self.attempts):
+            self.attempts[ip] = [t for t in self.attempts[ip] if t > now-300]
+            if not self.attempts[ip]: del self.attempts[ip]
+        history = self.attempts.setdefault(self.request.remote_ip, [])
+        if len(history) >= 10:
+            raise tornado.web.HTTPError(429, reason='Too many sign-in attempts. Try again in five minutes.')
+        history.append(now)
+        user = authenticate(username, password)
+        if not user:
+            raise tornado.web.HTTPError(401, reason='Invalid username or password.')
+        self.set_cookie('riskora_session', new_session(user['id']), httponly=True,
+                        samesite='Strict', secure=self.request.protocol == 'https', max_age=28800)
+        self.write_json({'user': {k:user[k] for k in ('id','username','role')}})
 
 # 3. Loan Requests Queue Handler
 class LoansHandler(BaseHandler):
@@ -119,7 +144,7 @@ class LoansHandler(BaseHandler):
                    r.risk_score, r.probability_of_default, r.risk_level, r.data_quality_score, r.anomaly_detected
             FROM loans l
             JOIN borrowers b ON l.borrower_id = b.id
-            LEFT JOIN risk_assessments r ON r.id = (
+            LEFT JOIN risk_assessments r ON l.status != 'REQUEST_RECEIVED' AND r.id = (
                 SELECT latest.id FROM risk_assessments latest WHERE latest.loan_id = l.id
                 ORDER BY latest.assessed_at DESC, latest.id DESC LIMIT 1
             )
@@ -209,7 +234,7 @@ class LoanDetailHandler(BaseHandler):
             SELECT * FROM risk_assessments WHERE loan_id = ? ORDER BY assessed_at DESC, id DESC LIMIT 1;
             """, (loan_id,)).fetchone()
             
-            if assessment_row:
+            if assessment_row and loan_data["status"] != "REQUEST_RECEIVED":
                 ass_dict = dict(assessment_row)
                 drivers = json.loads(ass_dict.get("drivers_json") or "[]")
                 protective = json.loads(ass_dict.get("protective_json") or "[]")
@@ -266,6 +291,27 @@ class LoanDetailHandler(BaseHandler):
             else:
                 loan_data["repayment"] = None
                 
+            decision = cursor.execute('SELECT d.*,a.username FROM review_decisions d JOIN reviewer_accounts a ON a.id=d.reviewer_id WHERE loan_id=? ORDER BY d.id DESC LIMIT 1', (loan_id,)).fetchone()
+            loan_data['review_decision'] = dict(decision) if decision else None
+            from backend.services.payment_service import cents
+            receipts = cursor.execute('SELECT * FROM payments WHERE loan_id=? ORDER BY id', (loan_id,)).fetchall()
+            paid_by_lender = {}
+            for receipt in receipts:
+                for allocation in json.loads(receipt['allocations_json']):
+                    lender = allocation['lender_id']
+                    paid_by_lender[lender] = paid_by_lender.get(lender,0) + cents(allocation['principal_allocated'])
+            committed = loan_data['funding']['total_requested'] if loan_data['funding'] else 0
+            loan_data['ledger'] = {'received':sum(cents(r['amount_paid']) for r in receipts)/100,
+                'principal_paid':sum(paid_by_lender.values())/100,
+                'outstanding_principal':max(0,cents(committed)-sum(paid_by_lender.values()))/100,
+                'lender_principal_paid':{k:v/100 for k,v in paid_by_lender.items()},
+                'payment_count':len(receipts),
+                'requires_reconciliation':any(r['schedule_id'] is None for r in receipts)}
+            if loan_data['ledger']['requires_reconciliation']:
+                loan_data['ledger']['outstanding_principal'] = None
+                loan_data['ledger']['warning'] = 'Legacy payment records are not linked to schedule versions. Review the original receipts before relying on balances or recording further payments.'
+            from backend.services.ora_service import build_brief
+            loan_data['ora'] = build_brief(loan_data, dict(assessment_row)) if loan_data['assessment'] else None
             self.write_json(loan_data)
 
 # 5. Risk Intelligence & ML Inference Handler
@@ -293,7 +339,11 @@ class RiskAnalysisHandler(BaseHandler):
                     raise tornado.web.HTTPError(404, reason="Loan not found.")
                     
         # Overlay with any passed body fields
-        combined = {**request_profile(loan_record), **request_profile(data)}
+        combined = request_profile(loan_record) if loan_id else request_profile(data)
+        if loan_id:
+            overrides = request_profile(data)
+            if any(combined.get(k) != v for k, v in overrides.items()):
+                raise tornado.web.HTTPError(409, reason='Edit the borrower profile first, or use the scenario endpoint for hypothetical inputs.')
         
         # 1. Run Data Quality Engine
         dq_results = DataQualityEngine.evaluate(combined)
@@ -330,16 +380,18 @@ class RiskAnalysisHandler(BaseHandler):
                     json.dumps(anomaly_results)
                 ))
                 
+                cursor.execute('UPDATE risk_assessments SET input_snapshot_json=?, reviewer_id=? WHERE id=?',
+                    (json.dumps(combined), self.reviewer['id'], cursor.lastrowid))
                 # Update loan status to RISK_ASSESSED
                 cursor.execute("""UPDATE loans SET status = ? WHERE id = ?
-                    AND status IN ('REQUEST_RECEIVED', 'NEEDS_VERIFICATION', 'RISK_ASSESSED');""",
+                    AND status IN ('REQUEST_RECEIVED', 'NEEDS_VERIFICATION', 'RISK_ASSESSED', 'APPROVED', 'REJECTED');""",
                     ("RISK_ASSESSED" if dq_results["verification_ready"] else "NEEDS_VERIFICATION", loan_id))
                 
                 # Audit log
                 cursor.execute("""
                 INSERT INTO audit_logs (event_type, entity_id, reviewer, details_json)
-                VALUES ('RISK_ANALYSIS_COMPLETED', ?, 'Underwriter', ?);
-                """, (loan_id, json.dumps({"score": ml_results["risk_score"], "level": ml_results["risk_level"]})))
+                VALUES ('RISK_ANALYSIS_COMPLETED', ?, ?, ?);
+                """, (loan_id, str(self.reviewer["id"]), json.dumps({"score": ml_results["risk_score"], "level": ml_results["risk_level"]})))
                 
                 conn.commit()
 
@@ -431,13 +483,29 @@ class FundingHandler(BaseHandler):
     def post(self):
         data = self.get_json_body()
         loan_id = data.get("loanId")
-        amount = float(data.get("amount", 120000))
+        amount = request_profile({"LoanAmount":data.get("amount",120000)})["LoanAmount"]
+        if amount is None: raise tornado.web.HTTPError(400, reason="Funding amount is required.")
         risk_level = data.get("riskLevel", "MEDIUM")
         mode = data.get("mode", "auto")
-        lender_count = int(data.get("lenderCount", 3))
+        raw_count = data.get('lenderCount',3)
+        if isinstance(raw_count,bool) or not isinstance(raw_count,(int,float)) or not np.isfinite(raw_count) or int(raw_count) != raw_count:
+            raise tornado.web.HTTPError(400, reason='Lender count must be a whole number.')
+        lender_count = int(raw_count)
         
         if not np.isfinite(amount) or amount <= 0 or mode not in ("auto", "single", "fractional"):
             raise tornado.web.HTTPError(400, reason="Provide a positive amount and valid funding mode.")
+        if not 2 <= lender_count <= 6:
+            raise tornado.web.HTTPError(400, reason='Lender pool size must be between 2 and 6 (single mode uses one lender).')
+        if loan_id:
+            with get_connection() as conn:
+                loan = conn.execute('SELECT * FROM loans WHERE id=?', (loan_id,)).fetchone()
+                if not loan: raise tornado.web.HTTPError(404, reason='Loan not found.')
+                if loan['status'] != 'APPROVED':
+                    raise tornado.web.HTTPError(409, reason='An explicit reviewer approval is required before funding. Existing commitments cannot be overwritten.')
+                if round(amount,2) != round(loan['loan_amount'],2):
+                    raise tornado.web.HTTPError(409, reason='Funding must equal the approved loan amount.')
+                assessment = conn.execute('SELECT risk_level FROM risk_assessments WHERE loan_id=? ORDER BY id DESC LIMIT 1', (loan_id,)).fetchone()
+                risk_level = assessment['risk_level']
         funding_result = FundingService.calculate_structure(
             loan_amount=amount,
             risk_level=risk_level,
@@ -454,6 +522,9 @@ class FundingHandler(BaseHandler):
         # Save funding position if loan_id provided
         if loan_id:
             with get_connection() as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                if conn.execute('SELECT status FROM loans WHERE id=?', (loan_id,)).fetchone()['status'] != 'APPROVED':
+                    raise tornado.web.HTTPError(409, reason='Loan status changed. Reload before funding.')
                 cursor = conn.cursor()
                 cursor.execute("""
                 INSERT INTO funding_positions (loan_id, mode, herfindahl_index, concentration_rating, positions_json)
@@ -465,7 +536,9 @@ class FundingHandler(BaseHandler):
                     funding_result["concentration_rating"],
                     json.dumps(funding_result["positions"])
                 ))
-                cursor.execute("UPDATE loans SET status = 'FUNDING_OPTIMIZED' WHERE id = ?;", (loan_id,))
+                cursor.execute("UPDATE loans SET status = 'FUNDED' WHERE id = ?;", (loan_id,))
+                cursor.execute('INSERT INTO audit_logs(event_type,entity_id,reviewer,details_json) VALUES (?,?,?,?)',
+                    ('FUNDING_COMMITTED',loan_id,str(self.reviewer['id']),json.dumps(funding_result)))
                 conn.commit()
 
         self.write_json(funding_result)
@@ -475,10 +548,14 @@ class RepaymentHandler(BaseHandler):
     def post(self):
         data = self.get_json_body()
         loan_id = data.get("loanId")
-        principal = float(data.get("principal", 120000))
-        annual_rate = float(data.get("rate", 12.0))
-        term = int(data.get("term", 36))
+        values = request_profile({'LoanAmount':data.get('principal',120000), 'InterestRate':data.get('rate',12), 'LoanTerm':data.get('term',36)})
+        principal, annual_rate, term = values['LoanAmount'], values['InterestRate'], values['LoanTerm']
+        if any(v is None for v in values.values()): raise tornado.web.HTTPError(400, reason='Provide principal, rate and term.')
+        if not loan_id: raise tornado.web.HTTPError(400, reason='A saved funded loan is required.')
         start_date = data.get("startDate")
+        if start_date is not None:
+            try: datetime.date.fromisoformat(start_date)
+            except (ValueError,TypeError): raise tornado.web.HTTPError(400, reason='First due date must be a valid YYYY-MM-DD date.')
         schedule_type = data.get("scheduleType", "monthly")
         policy = data.get("allocationPolicy", "pro-rata")
         positions = data.get("positions", [])
@@ -489,6 +566,15 @@ class RepaymentHandler(BaseHandler):
                     raise tornado.web.HTTPError(404, reason="Loan not found.")
                 if conn.execute("SELECT id FROM payments WHERE loan_id = ? LIMIT 1", (loan_id,)).fetchone():
                     raise tornado.web.HTTPError(409, reason="A loan with recorded payments cannot be reconfigured.")
+        if loan_id:
+            with get_connection() as conn:
+                loan = conn.execute('SELECT * FROM loans WHERE id=?', (loan_id,)).fetchone()
+                fund = conn.execute('SELECT * FROM funding_positions WHERE loan_id=? ORDER BY id DESC LIMIT 1', (loan_id,)).fetchone()
+                if not fund or loan['status'] not in ('FUNDED', 'REPAYMENT_CONFIGURED'):
+                    raise tornado.web.HTTPError(409, reason='Commit approved funding before generating a schedule.')
+                if principal != loan['loan_amount'] or annual_rate != loan['interest_rate'] or term != loan['loan_term']:
+                    raise tornado.web.HTTPError(409, reason='Schedule terms must match the approved loan. Edit terms before approval.')
+                positions = json.loads(fund['positions_json'])
         if not np.isfinite(principal) or principal <= 0 or not np.isfinite(annual_rate) or not 0 <= annual_rate <= 100 or not 1 <= term <= 600:
             raise tornado.web.HTTPError(400, reason="Invalid principal, annual rate or term.")
         if schedule_type not in ("monthly", "bi-monthly", "flexible") or policy not in ("pro-rata", "largest-first", "earliest-first"):
@@ -507,6 +593,9 @@ class RepaymentHandler(BaseHandler):
         
         if loan_id:
             with get_connection() as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                if conn.execute('SELECT 1 FROM payments WHERE loan_id=?', (loan_id,)).fetchone():
+                    raise tornado.web.HTTPError(409, reason='Payments exist; the schedule cannot be replaced.')
                 cursor = conn.cursor()
                 cursor.execute("""
                 INSERT INTO repayment_schedules (
@@ -526,6 +615,7 @@ class RepaymentHandler(BaseHandler):
                     schedule["total_repayable"],
                     json.dumps(schedule["installments"])
                 ))
+                schedule["id"] = cursor.lastrowid
                 cursor.execute("UPDATE loans SET status = 'REPAYMENT_CONFIGURED' WHERE id = ?;", (loan_id,))
                 conn.commit()
                 
@@ -534,85 +624,47 @@ class RepaymentHandler(BaseHandler):
 # 9. Payment Event Recording Handler
 class RecordPaymentHandler(BaseHandler):
     def post(self):
+        from backend.services.payment_service import apply_payment, cents
+        data = self.get_json_body()
+        loan_id = data.get('loanId') or data.get('loan_id')
+        inst_num = data.get('installmentNum')
+        key = data.get('idempotencyKey')
+        if not isinstance(inst_num,int) or isinstance(inst_num,bool) or not isinstance(key,str) or not 8 <= len(key) <= 100:
+            raise tornado.web.HTTPError(400, reason='Installment number and a unique payment reference (8–100 characters) are required.')
         try:
-            data = self.get_json_body()
-            loan_id = data.get("loanId") or data.get("loan_id") or data.get("id")
-            inst_num = int(data.get("installmentNum") or data.get("installment_num") or 1)
-            amount = float(data.get("amount", 0.0))
-            
-            if not loan_id:
-                self.write_json({"error": "Loan ID required"}, status=400)
+            amount = cents(data.get('amount'))/100
+        except ValueError as error:
+            raise tornado.web.HTTPError(400, reason=str(error))
+        with get_connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            previous = conn.execute('SELECT * FROM payments WHERE idempotency_key=?', (key,)).fetchone()
+            if previous:
+                if previous['loan_id'] != loan_id or previous['installment_num'] != inst_num or previous['amount_paid'] != amount:
+                    raise tornado.web.HTTPError(409, reason='This payment reference was already used for a different payment.')
+                self.write_json({'success':True,'duplicate':True,'payment_id':previous['id']})
                 return
-                
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                sched_row = cursor.execute("""
-                SELECT * FROM repayment_schedules WHERE loan_id = ? ORDER BY created_at DESC, id DESC LIMIT 1;
-                """, (loan_id,)).fetchone()
-                
-                if not sched_row:
-                    self.write_json({"error": "Generate and review a repayment schedule before recording payment."}, status=409)
-                    return
-
-                installments = json.loads(sched_row["installments_json"])
-                target = next((inst for inst in installments if inst.get("installment_num") == inst_num), None)
-                if not target:
-                    self.write_json({"error": f"Installment #{inst_num} not found in schedule"}, status=404)
-                    return
-                    
-                if target.get("status") == "PAID":
-                    self.write_json({"error": "Installment already paid."}, status=409)
-                    return
-                if not np.isfinite(amount) or amount <= 0 or round(amount, 2) != round(target["payment_amount"], 2):
-                    self.write_json({"error": "Enter the exact positive installment amount. Partial payments are not supported by this endpoint."}, status=400)
-                    return
-                target["status"] = "PAID"
-                target["paid_at"] = datetime.datetime.now().isoformat()
-                target["actual_amount_paid"] = amount or target.get("payment_amount", 0.0)
-                allocations = target.get("allocations") or []
-                
-                cursor.execute("""
-                INSERT INTO payments (loan_id, installment_num, amount_paid, allocations_json)
-                VALUES (?, ?, ?, ?);
-                """, (loan_id, inst_num, target["actual_amount_paid"], json.dumps(allocations)))
-                
-                # Update installments in schedule
-                cursor.execute("""
-                UPDATE repayment_schedules SET installments_json = ? WHERE id = ?;
-                """, (json.dumps(installments), sched_row["id"]))
-                
-                # Institutional Audit Log entry
-                cursor.execute("""
-                INSERT INTO audit_logs (event_type, entity_id, reviewer, details_json)
-                VALUES (?, ?, ?, ?);
-                """, (
-                    "PAYMENT_RECORDED",
-                    loan_id,
-                    "Institutional Risk Desk",
-                    json.dumps({
-                        "installment_num": inst_num,
-                        "amount_paid": target["actual_amount_paid"],
-                        "paid_at": target["paid_at"],
-                        "remaining_balance": target.get("remaining_balance", 0.0)
-                    })
-                ))
-                
-                # Check if entire loan is settled
-                unpaid = [i for i in installments if i.get("status") != "PAID"]
-                new_loan_status = "FULLY_PAID" if len(unpaid) == 0 else "REPAYING"
-                cursor.execute("UPDATE loans SET status = ? WHERE id = ?;", (new_loan_status, loan_id))
-                
-                conn.commit()
-                
-            self.write_json({
-                "success": True,
-                "message": f"Installment #{inst_num} recorded as PAID.",
-                "payment": target,
-                "loan_status": new_loan_status,
-                "unpaid_count": len(unpaid)
-            })
-        except Exception as e:
-            self.write_json({"error": f"Failed to record payment: {str(e)}"}, status=500)
+            if conn.execute('SELECT 1 FROM payments WHERE loan_id=? AND schedule_id IS NULL', (loan_id,)).fetchone():
+                raise tornado.web.HTTPError(409, reason='Legacy receipts require reconciliation before additional payments.')
+            sched = conn.execute('SELECT * FROM repayment_schedules WHERE loan_id=? ORDER BY id DESC LIMIT 1', (loan_id,)).fetchone()
+            if not sched: raise tornado.web.HTTPError(409, reason='Generate a schedule before recording payments.')
+            if data.get('scheduleId') != sched['id']:
+                raise tornado.web.HTTPError(409, reason='Schedule changed. Reload the case before recording payment.')
+            installments = json.loads(sched['installments_json'])
+            target = next((i for i in installments if i['installment_num']==inst_num), None)
+            if not target: raise tornado.web.HTTPError(404, reason='Installment not found.')
+            if target['status'] == 'PAID': raise tornado.web.HTTPError(409, reason='Installment already paid.')
+            try: allocations = apply_payment(target,amount)
+            except ValueError as error: raise tornado.web.HTTPError(400, reason=str(error))
+            target['paid_at'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            cursor = conn.execute('INSERT INTO payments(loan_id,installment_num,amount_paid,allocations_json,schedule_id,idempotency_key) VALUES (?,?,?,?,?,?)',
+                (loan_id,inst_num,amount,json.dumps(allocations),sched['id'],key))
+            payment_id = cursor.lastrowid
+            conn.execute('UPDATE repayment_schedules SET installments_json=? WHERE id=?', (json.dumps(installments),sched['id']))
+            status = 'CLOSED' if all(i['status']=='PAID' for i in installments) else 'REPAYING'
+            conn.execute('UPDATE loans SET status=? WHERE id=?', (status,loan_id))
+            conn.execute('INSERT INTO audit_logs(event_type,entity_id,reviewer,details_json) VALUES (?,?,?,?)',
+                ('PAYMENT_RECORDED',loan_id,str(self.reviewer['id']),json.dumps({'payment_id':payment_id,'amount':amount,'schedule_id':sched['id'],'reference':key})))
+        self.write_json({'success':True,'payment':target,'payment_id':payment_id,'loan_status':status})
 
 # 10. Lender Portfolio Exposure Monitor Handler
 class PortfolioExposureHandler(BaseHandler):
@@ -644,6 +696,7 @@ class PortfolioExposureHandler(BaseHandler):
             FROM funding_positions f
             JOIN loans l ON f.loan_id = l.id
             JOIN borrowers b ON l.borrower_id = b.id
+            WHERE f.id = (SELECT MAX(latest.id) FROM funding_positions latest WHERE latest.loan_id=f.loan_id)
             ORDER BY f.funded_at DESC LIMIT 10;
             """).fetchall()
             
@@ -659,7 +712,7 @@ class PortfolioExposureHandler(BaseHandler):
                     "total_portfolio_principal": round(total_req, 2),
                     "risk_distribution": bands,
                     "high_risk_exposure_pct": round((bands.get("HIGH", 0) / max(total_loans, 1)) * 100, 1),
-                    "active_lender_pools": 6
+                    "active_lender_pools": cursor.execute("SELECT COUNT(DISTINCT loan_id) FROM funding_positions").fetchone()[0]
                 },
                 "recent_funding_structures": active_pos
             })
@@ -802,7 +855,7 @@ class PublicFileHandler(tornado.web.StaticFileHandler):
             relative = resolved.relative_to(PROJECT_ROOT)
         except ValueError:
             raise tornado.web.HTTPError(404)
-        public_files = {"index.html", "app.js", "styles.css"}
+        public_files = {"index.html", "app.js", "integration.js", "styles.css"}
         if relative.as_posix() not in public_files:
             if len(relative.parts) != 2 or relative.parts[0] != "assets" or relative.suffix.lower() not in {".png", ".mp4"}:
                 raise tornado.web.HTTPError(404)
@@ -812,7 +865,8 @@ class PublicFileHandler(tornado.web.StaticFileHandler):
 def make_app():
     static_path = str(PROJECT_ROOT)
     
-    return tornado.web.Application([
+    from backend.integration import integration_routes
+    return tornado.web.Application(integration_routes() + [
         # REST API Routes
         (r"/api/health", HealthHandler),
         (r"/api/auth/login", AuthHandler),

@@ -25,3 +25,20 @@ venv/
 # Operating-system clutter
 .DS_Store
 Thumbs.db
+
+# Private local runtime data and working files
+data/runtime/
+tmp/
+
+# Private databases and backups outside the default runtime directory.
+# Existing tracked historical data/riskora.db remains tracked.
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.bak
+*.log
+# Incoming archives and local request/session exports are not source code.
+*.zip
+cookies*.txt

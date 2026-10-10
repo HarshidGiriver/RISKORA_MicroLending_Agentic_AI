@@ -12,7 +12,7 @@ class WorkflowRegressionTests(IsolatedDatabaseMixin, AsyncHTTPTestCase):
         self.assertEqual(response.code, status, response.body.decode())
         return json.loads(response.body)
     def test_saved_contract_and_payment_guards(self):
-        fund = self.post('/api/funding/optimize', dict(loanId='LR-1054', amount=120000, mode='fractional'))
+        fund = self.fund_seed(rate=0, term=12)
         plan = self.post('/api/repayment/generate', dict(loanId='LR-1054', principal=120000, rate=0, term=12, positions=fund['positions']))
         def detail(): return json.loads(self.fetch('/api/loans/LR-1054').body)
         saved = detail()
@@ -22,10 +22,10 @@ class WorkflowRegressionTests(IsolatedDatabaseMixin, AsyncHTTPTestCase):
             self.assertEqual(saved['repayment'][key], plan[key])
         self.assertEqual(len(saved['repayment']['lender_summary']), 3)
         self.assertFalse(any(i['status'] == 'PAID' for i in saved['repayment']['installments']))
-        for amount in (0, -1, 1, 10001):
-            self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=amount), 400)
-        self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=10000))
-        self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=10000), 409)
+        for amount in (0, -1, 10001):
+            self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=amount, scheduleId=plan['id'], idempotencyKey='invalid-payment'), 400)
+        self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=10000, scheduleId=plan['id'], idempotencyKey='payment-full-1'))
+        self.post('/api/repayment/record', dict(loanId='LR-1054', installmentNum=1, amount=10000, scheduleId=plan['id'], idempotencyKey='payment-full-2'), 409)
         saved = detail()['repayment']
         self.assertEqual(saved['num_installments'], 12)
         self.assertEqual(saved['installments'][0]['status'], 'PAID')

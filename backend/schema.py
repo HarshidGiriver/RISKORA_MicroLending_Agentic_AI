@@ -45,7 +45,7 @@ CATEGORIES = {
 }
 REQUIRED = ("Income", "LoanAmount", "CreditScore", "DTIRatio", "LoanTerm",
             "MonthsEmployed", "NumCreditLines", "InterestRate")
-OPTIONAL = tuple(CATEGORIES)
+OPTIONAL = ("Age",) + tuple(CATEGORIES)
 DEFAULTS = {
     "Age": 35, "Income": 450000, "LoanAmount": 120000, "CreditScore": 650,
     "MonthsEmployed": 36, "NumCreditLines": 4, "InterestRate": 12.5,
@@ -75,6 +75,8 @@ def _convert(field, value):
         if not low <= number <= high or (integer and not number.is_integer()):
             kind = "integer" if integer else "number"
             raise ValueError(f"{field} must be a {kind} between {low} and {high}.")
+        if field == 'LoanAmount' and round(number, 2) != number:
+            raise ValueError('LoanAmount must have at most two decimal places.')
         return int(number) if integer else number
     text = str(value).strip()
     if field in ("HasMortgage", "HasDependents", "HasCoSigner"):
