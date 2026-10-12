@@ -1,0 +1,143 @@
+{
+  "dataset": "nikhil1e9/loan-default",
+  "version": 2,
+  "sha256": "1d7556a9071e7f9e872dc05a0cad174229fb1164b1cf3470ad35eed195c24278",
+  "rows": 255347,
+  "columns": [
+    "LoanID",
+    "Age",
+    "Income",
+    "LoanAmount",
+    "CreditScore",
+    "MonthsEmployed",
+    "NumCreditLines",
+    "InterestRate",
+    "LoanTerm",
+    "DTIRatio",
+    "Education",
+    "EmploymentType",
+    "MaritalStatus",
+    "HasMortgage",
+    "HasDependents",
+    "LoanPurpose",
+    "HasCoSigner",
+    "Default"
+  ],
+  "missing_values": {
+    "LoanID": 0,
+    "Age": 0,
+    "Income": 0,
+    "LoanAmount": 0,
+    "CreditScore": 0,
+    "MonthsEmployed": 0,
+    "NumCreditLines": 0,
+    "InterestRate": 0,
+    "LoanTerm": 0,
+    "DTIRatio": 0,
+    "Education": 0,
+    "EmploymentType": 0,
+    "MaritalStatus": 0,
+    "HasMortgage": 0,
+    "HasDependents": 0,
+    "LoanPurpose": 0,
+    "HasCoSigner": 0,
+    "Default": 0
+  },
+  "duplicate_rows": 0,
+  "duplicate_loan_ids": 0,
+  "numeric_ranges": {
+    "Age": [
+      18.0,
+      69.0
+    ],
+    "Income": [
+      15000.0,
+      149999.0
+    ],
+    "LoanAmount": [
+      5000.0,
+      249999.0
+    ],
+    "CreditScore": [
+      300.0,
+      849.0
+    ],
+    "MonthsEmployed": [
+      0.0,
+      119.0
+    ],
+    "NumCreditLines": [
+      1.0,
+      4.0
+    ],
+    "InterestRate": [
+      2.0,
+      25.0
+    ],
+    "LoanTerm": [
+      12.0,
+      60.0
+    ],
+    "DTIRatio": [
+      0.1,
+      0.9
+    ]
+  },
+  "category_counts": {
+    "Education": {
+      "Bachelor's": 64366,
+      "High School": 63903,
+      "Master's": 63541,
+      "PhD": 63537
+    },
+    "EmploymentType": {
+      "Full-time": 63656,
+      "Part-time": 64161,
+      "Self-employed": 63706,
+      "Unemployed": 63824
+    },
+    "MaritalStatus": {
+      "Divorced": 85033,
+      "Married": 85302,
+      "Single": 85012
+    },
+    "HasMortgage": {
+      "No": 127670,
+      "Yes": 127677
+    },
+    "HasDependents": {
+      "No": 127605,
+      "Yes": 127742
+    },
+    "LoanPurpose": {
+      "Auto": 50844,
+      "Business": 51298,
+      "Education": 51005,
+      "Home": 51286,
+      "Other": 50914
+    },
+    "HasCoSigner": {
+      "No": 127646,
+      "Yes": 127701
+    },
+    "Default": {
+      "0": 225694,
+      "1": 29653
+    }
+  },
+  "application_compatibility_flags": {
+    "employment_category_not_in_application_schema": 127817,
+    "unemployed_with_positive_employment_months": 63292,
+    "below_application_annual_income_warning_threshold": 66096,
+    "loan_exceeds_application_income_multiple_without_cosigner": 34769,
+    "employment_exceeds_application_working_lifetime_rule": 17274
+  },
+  "default_rate": 0.11612824901017048,
+  "runtime_replacement_ready": false,
+  "blocking_questions": [
+    "Currency denomination is not specified in the source feature dictionary; application money is INR.",
+    "Full-time and Part-time do not mean Salaried and Contract; no automatic mapping has been applied.",
+    "Cohort origin, observation period and default horizon are not established by the available source documentation.",
+    "Input-quality inconsistencies require review before model training or deployment."
+  ]
+}

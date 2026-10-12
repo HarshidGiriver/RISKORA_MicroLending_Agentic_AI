@@ -42,3 +42,6 @@ tmp/
 # Incoming archives and local request/session exports are not source code.
 *.zip
 cookies*.txt
+
+# External dataset is reproducible from the pinned, checksum-verified downloader.
+/data/external/kaggle_loan_default/Loan_default.csv

@@ -190,7 +190,13 @@ Schema changes currently use additive startup migration and a version marker, no
 | Payment returns 409 | Check current schedule ID, remaining amount, reference reuse and legacy reconciliation warning |
 | Same borrower gives different scenario | Compare all 16 normalized fields and artifact revision; unchanged overrides must give zero delta |
 
-There is no password-reset screen. Do not delete a live database to bypass login. Account recovery needs an administrator-led procedure that preserves financial records; this is listed as maintenance work.
+There is no browser password-reset screen. A local operator with access to the database can reset an existing account in an interactive terminal:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/reset_reviewer_password.py YOUR_USERNAME
+```
+
+The command displays the configured database path and prompts twice for a new password with hidden typing. It preserves loans, revokes that account's existing sessions and records a local recovery audit event. It does not create missing accounts or databases. Use the same `RISKORA_DB_PATH` as the server if you configured a custom database. Do not send the password through chat, command-line arguments or a committed file. Filesystem access to the database is the trust boundary for this recovery command.
 
 ## Documentation
 
@@ -210,3 +216,7 @@ There is no password-reset screen. Do not delete a live database to bypass login
 | [RISKORA_Final_Review_Document.pdf](RISKORA_Final_Review_Document.pdf) | Current consolidated technical review |
 
 Generate the current review PDF with `python -m pip install -r requirements-docs.txt`, then `python generate_final_review_pdf.py`. The generator reads maintained Markdown guides and saved metrics; it does not access the live database or retrain the model. Its default output is the root PDF above. The older `output/pdf/RISKORA_Review_2_Report.pdf` is a historical pre-integration submission, not the current implementation reference.
+
+## External dataset research
+
+A separate [Kaggle loan-default dataset](data/external/kaggle_loan_default/README.md) is now available for research: 255,347 rows, 18 columns and a Default target. The source manifest, reproducible downloader and quality audit are included. Run `python scripts/prepare_external_dataset.py` to obtain the pinned copy. Employment-category differences, unresolved currency and cohort provenance prevent treating it as a direct replacement for the current INR model. The running application still uses the original synthetic dataset and matching artifacts.

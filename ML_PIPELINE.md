@@ -90,3 +90,7 @@ The dataset explorer uses its own labelled heuristic estimates. It should not be
 Define the outcome and observation window, obtain lawful representative data, separate applicants chronologically, measure missingness and selection bias, compare against simple baselines and evaluate calibration by relevant subgroups. Refit preprocessing inside cross-validation, select thresholds against measured costs, add model-specific explanations and establish versioned approval and rollback procedures. Drift monitoring requires observed future inputs and outcomes; it is not currently operating in this prototype.
 
 See [MODEL_CARD.md](MODEL_CARD.md) for the intended use and evaluation limits, and [DATA_DICTIONARY.md](DATA_DICTIONARY.md) for every input and fallback.
+
+## External source evaluation, 12 October 2026
+
+The project now includes acquisition and profiling support for `nikhil1e9/loan-default` version 2. It has 255,347 rows and the same column names as the current dataset, but has different employment categories and unresolved monetary denomination and cohort provenance. Its raw values have been preserved, and it has not been used to retrain or replace this model. See [the external dataset guide](data/external/kaggle_loan_default/README.md) for source, licence, measured quality flags and adoption gates.

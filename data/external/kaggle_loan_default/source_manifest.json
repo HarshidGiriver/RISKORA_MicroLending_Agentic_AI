@@ -1,0 +1,25 @@
+{
+  "dataset_ref": "nikhil1e9/loan-default",
+  "title": "Loan Default Prediction Dataset",
+  "source_url": "https://www.kaggle.com/datasets/nikhil1e9/loan-default",
+  "upstream_url": "https://www.coursera.org/projects/data-science-coding-challenge-loan-default-prediction",
+  "metadata_url": "https://www.kaggle.com/api/v1/datasets/view/nikhil1e9/loan-default",
+  "download_url": "https://www.kaggle.com/api/v1/datasets/download/nikhil1e9/loan-default?datasetVersionNumber=2",
+  "dataset_version": 2,
+  "source_license": "CC0: Public Domain",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "review_date": "2026-10-12",
+  "csv_file": "Loan_default.csv",
+  "csv_sha256": "1d7556a9071e7f9e872dc05a0cad174229fb1164b1cf3470ad35eed195c24278",
+  "csv_bytes": 24834870,
+  "source_description": "## Introduction\n&gt; Financial loan services are leveraged by companies across many industries, from big banks to financial institutions to government loans. One of the primary objectives of companies with financial loan services is to decrease payment defaults and ensure that individuals are paying back their loans as expected. In order to do this efficiently and systematically, many companies employ machine learning to predict which individuals are at the highest risk of defaulting on their loans, so that proper interventions can be effectively deployed to the right audience.\n\n## Description\n&gt; This dataset has been taken from Coursera's [Loan Default Prediction Challenge](https://www.coursera.org/projects/data-science-coding-challenge-loan-default-prediction) and will provide you the opportunity to tackle one of the most industry-relevant machine learning problems with a unique dataset that will put your modeling skills to the test. The dataset contains 255,347 rows and 18 columns in total.\n\n## Features\n![](https://www.googleapis.com/download/storage/v1/b/kaggle-user-content/o/inbox%2F5934442%2F4601b71040400d531d38ba6db2d59a29%2Floan_desc.png?generation=1694520603948387&alt=media)\n\n\n&gt; **Image credits:** <a href=\"https://www.freepik.com/free-vector/premium-cash-reward-bonus-work-done-best-employee-rewarding-promotion-order-efficiency-stimulation-boss-subordinate-cartoon-characters_12084769.htm#query=business%20loan&position=0&from_view=keyword&track=ais\">Image by vectorjuice</a> on Freepik\n\nPlease, provide an upvote👍if the dataset was useful for your task. It would be much appreciated😄",
+  "usage": "Separate research candidate; not the deployed model training source",
+  "currency": "Unspecified in available source dictionary",
+  "loan_term_unit": "months",
+  "income_period": "annual",
+  "default_encoding": {
+    "1": "default",
+    "0": "non-default"
+  },
+  "cohort_verification": "No independently verified cohort, sampling period or default horizon in available documentation"
+}
