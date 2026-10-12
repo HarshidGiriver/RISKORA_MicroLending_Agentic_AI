@@ -469,16 +469,27 @@ function renderIntelligence(res) {
 
 // 8. Scenario Lab (What-If ML Simulation)
 let scenarioRequest = 0;
+function clearScenarioResults(status, detail) {
+  $('scenarioRisk').textContent = status;
+  $('scenarioDelta').textContent = detail;
+  ['scenarioPd', 'scenarioPdDelta', 'scenarioEmi', 'scenarioFunding', 'scenarioDecision']
+    .forEach(id => $(id).textContent = '—');
+  $('scenarioEmi').nextElementSibling.textContent = '—';
+}
+
 async function updateScenarioLab() {
   const request = ++scenarioRequest;
   if (!activeCase) return;
-  const simAmount = Number($('scenarioSlider').value) || activeCase.loan_amount;
+  // Range inputs can expose fractional precision beyond the displayed currency.
+  const simAmount = Number(Number($('scenarioSlider').value).toFixed(2));
+  $('scenarioSlider').value = simAmount;
   const simCredit = Number($('scenarioCreditSlider').value) || (activeCase.credit_score || 650);
   const simDti = Number($('scenarioDtiSlider').value);
 
   $('scenarioAmount').textContent = money(simAmount);
   $('scenarioCreditVal').textContent = simCredit;
   $('scenarioDtiVal').textContent = (simDti * 100).toFixed(0) + '%';
+  clearScenarioResults('Calculating…', 'Updating scenario');
 
   try {
     const res = await apiCall('/api/risk/simulate', {
@@ -507,7 +518,7 @@ async function updateScenarioLab() {
     $('scenarioFunding').textContent = res.scenario.recommended_mode === 'fractional' ? 'Fractional Syndication' : 'Single Lender';
     $('scenarioDecision').textContent = res.scenario.level === 'HIGH' ? 'Escalate to Senior Committee' : (res.scenario.level === 'MEDIUM' ? 'Conditional Underwriting' : 'Eligible for Fast-Track');
   } catch (err) {
-    if (request === scenarioRequest) { $('scenarioRisk').textContent = 'Unavailable'; $('scenarioDelta').textContent = err.message; }
+    if (request === scenarioRequest) clearScenarioResults('Unavailable', err.message);
   }
 }
 

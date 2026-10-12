@@ -119,6 +119,20 @@ class FoundationAPITests(IsolatedDatabaseMixin, AsyncHTTPTestCase):
         self.assertEqual(canonical, aliases)
         self.assertEqual(aliases["scenario"]["indicative_emi"], 5000)
 
+    def test_scenario_amount_precision_and_boundaries_preserve_saved_loan(self):
+        before = json.loads(self.fetch('/api/loans/LR-1054').body)
+        for amount in (0.01, 1448324.39, 5000000):
+            with self.subTest(amount=amount):
+                result = self.post('/api/risk/simulate', {
+                    'baseLoanId': 'LR-1054', 'scenario': {'LoanAmount': amount}})
+                self.assertIn(result['scenario']['level'], ('LOW', 'MEDIUM', 'HIGH'))
+                self.assertGreaterEqual(result['scenario']['score'], 5)
+                self.assertLessEqual(result['scenario']['score'], 99)
+        for amount in (1448324.389739, 5000000.01):
+            self.post('/api/risk/simulate', {
+                'baseLoanId': 'LR-1054', 'scenario': {'LoanAmount': amount}}, 400)
+        self.assertEqual(json.loads(self.fetch('/api/loans/LR-1054').body), before)
+
     def test_unknown_loans_and_invalid_scenarios_rejected(self):
         self.post("/api/risk/analyze", {"loanId": "missing"}, 404)
         self.post("/api/risk/simulate", {"baseLoanId": "missing"}, 404)

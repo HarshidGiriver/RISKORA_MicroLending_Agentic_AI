@@ -24,3 +24,4 @@ jobs:
           node-version: '22'
       - run: node --check app.js
       - run: node --check integration.js
+      - run: node --test tests/test_scenario_ui.cjs
