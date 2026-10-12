@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RISKORA | AI/ML Micro-Lending Risk Platform</title>
 <meta name="description" content="RISKORA — AI-assisted risk-based framework and decision-support workstation for digital micro-lending.">
-<link rel="stylesheet" href="styles.css?v=ora-1">
+<link rel="stylesheet" href="styles.css?v=ora-2-sidebar-scroll">
 </head>
 <body>
 <div id="accessGate" class="access-gate">
@@ -695,7 +695,7 @@
     <div class="panel">
       <div class="eyebrow">EMPIRICAL OUTCOMES BY RISK BAND</div>
       <h2>Empirical default rate separation</h2>
-      <p style="font-size:11px; margin-bottom:15px;">Does RISKORA's classification genuinely separate real outcomes?</p>
+      <p style="font-size:11px; margin-bottom:15px;">Observed default labels by risk band in the synthetic test dataset.</p>
       <div class="band-perf-table">
         <div class="band-perf-row">
           <div><b style="color:var(--green)">LOW RISK (Score 0–30)</b><span>960 loans in test set</span></div>
@@ -712,15 +712,16 @@
       </div>
       <div class="ai-note" style="margin-top:15px;">
         <b>Separation Power</b>
-        <span>Observed default rate escalates nearly 10× from Low (3.75%) to High (36.20%), confirming strong discriminatory power without target leakage.</span>
+        <span>The synthetic test set shows 3.75% default in the low band and 36.20% in the high band. This separation does not establish real-world accuracy or prove the absence of data leakage.</span>
       </div>
     </div>
   </div>
 
   <!-- Global Feature Importance Table -->
   <div class="panel" style="margin-top:20px;">
-    <div class="eyebrow">GLOBAL ATTRIBUTION</div>
-    <h2>Top model feature weights across dataset</h2>
+    <div class="eyebrow">BASELINE MODEL COEFFICIENTS</div>
+    <h2>Logistic regression baseline weights</h2>
+    <p>These signed coefficients come from the logistic regression baseline on transformed features. They do not explain individual predictions from the active HistGradientBoosting model.</p>
     <div id="featureImportanceTable" style="margin-top:12px;"></div>
   </div>
 </section>

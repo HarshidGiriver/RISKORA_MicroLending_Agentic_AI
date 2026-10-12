@@ -4,7 +4,11 @@ import sys
 
 
 def main(argv=None):
-    from backend.config import PORT, DATA_PATH
+    try:
+        from backend.config import PORT, DATA_PATH
+    except ValueError as error:
+        print(f"Startup failed: invalid configuration. {error}", file=sys.stderr)
+        return 1
     parser = argparse.ArgumentParser(description="Start the local RISKORA workstation.")
     parser.add_argument("port", nargs="?", type=int, default=PORT)
     parser.add_argument("--check", action="store_true", help="Validate data and all model artifacts without writing to the database or starting HTTP.")

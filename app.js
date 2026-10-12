@@ -982,7 +982,8 @@ async function handleManualSandbox(e) {
         <span class="risk-pill ${res.risk_level.toLowerCase()}">${res.risk_level} RISK</span>
       </div>
 
-      <div class="eyebrow">PRIMARY DRIVERS</div>
+      <div class="eyebrow">POLICY RULE INDICATORS</div>
+      <p>Rule-based points are policy indicators, not contributions to the trained model's prediction.</p>
       <div style="margin-top:8px;">
         ${res.risk_drivers.map(d => `
           <div class="driver-item">

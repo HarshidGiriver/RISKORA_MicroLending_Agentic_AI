@@ -912,8 +912,10 @@ def run_server(port=PORT):
             raise
 
     if not bound:
-        print(f"[ERROR] Could not bind to any port between {original_port} and {original_port + 9}. Please check running processes.")
-        return
+        raise RuntimeError(
+            f"Could not bind to any port between {original_port} and {min(original_port + 9, 65535)}. "
+            "Stop the conflicting server or choose another port."
+        )
 
     print(f"=" * 68)
     print(f"  RISKORA — Institutional Risk Intelligence Workstation")
@@ -937,4 +939,3 @@ if __name__ == "__main__":
         except ValueError:
             pass
     run_server(port)
-

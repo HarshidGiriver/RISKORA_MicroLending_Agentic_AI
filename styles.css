@@ -80,6 +80,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 
 
 /* Keep all workflow pages reachable on small screens. */
+/* Scroll the fixed sidebar independently, including at short desktop heights. */
+@media screen and (min-width:721px) {
+  .sidebar {
+    overflow-y:auto;
+    overflow-x:hidden;
+    overscroll-behavior-y:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#687078 var(--nav);
+  }
+  .sidebar > * { flex-shrink:0; }
+}
 .main,.page,.panel,.table-scroll{min-width:0}
 @media(min-width:721px){.case-table-row{grid-template-columns:1.5fr .7fr .7fr .75fr .9fr 1fr auto}}
 @media(max-width:720px){
